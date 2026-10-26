@@ -1,6 +1,27 @@
 <!DOCTYPE html>
 <html lang="id">
-<head>
+<head><style>
+@font-face {
+  font-family: "Optimistic";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/OptimisticAI_VF_Optimized.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Optimistic Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/OptimisticMono_W_TextRegular.woff2") format("woff2");
+}
+:where(html) {
+  font-family: "Optimistic", system-ui, sans-serif;
+}
+:where(code, pre, kbd, samp) {
+  font-family: "Optimistic Mono", ui-monospace, monospace;
+}
+</style>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1e1e1e" id="themeColorMeta">
@@ -100,6 +121,12 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
 .gitrow .gbtn{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;flex:none;background:none;border:0;color:var(--text)}
 .gitrow .gbtn:active{background:var(--panel2)}
 .gitrow .gbtn svg{width:14px;height:14px}
+
+.import-box{padding:10px;background:var(--panel2);border-radius:16px;margin:8px 0;border:1px solid var(--border)}
+.import-box .row-input{display:flex;gap:6px;margin-top:6px}
+.import-box .in{font-size:12px}
+#importStatus{margin-top:6px;word-break:break-all}
+.import-box .check{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:6px}
 .hash{font-size:11px;color:var(--muted);font-family:monospace;min-width:52px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;backdrop-filter:blur(2px)}
 .modal.show{display:flex}
@@ -186,6 +213,18 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
     <div id="fileList"></div>
   </section>
   <section class="pane" id="p-git">
+
+    <div class="import-box">
+      <div class="gitsec" style="padding:0 0 6px 0">Import Repository</div>
+      <input class="in" id="importUrl" placeholder="https://github.com/user/repo atau user/repo">
+      <div class="row-input">
+        <input class="in" id="importBranch" placeholder="branch: main" style="flex:1">
+        <button class="btn" id="importBtn" style="width:auto;margin:0;padding:10px 16px;flex:none">Clone</button>
+      </div>
+      <label class="check"><input type="checkbox" id="importReplace"> Replace semua file lama</label>
+      <div id="importStatus" class="hint">Tempel link repo GitHub lalu Clone. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
+    </div>
+
     <div class="hint">Branch: main · origin</div>
     <div class="gitsec">Staged</div>
     <div id="gitStaged"></div>
@@ -697,6 +736,238 @@ $('commitBtn').onclick=function(){
  toast('Commit '+hash+' dibuat');
 };
 
+
+/* ===== GitHub Import / Clone Repository ===== */
+function parseGithubUrl(input){
+  input=(input||'').trim();
+  if(!input) return null;
+  var owner=null,repo=null,branch=null;
+  try{
+    if(input.indexOf('github.com')>=0){
+      var u=new URL(input);
+      var parts=u.pathname.split('/').filter(Boolean);
+      owner=parts[0]||null;
+      repo=parts[1]?parts[1].replace(/\.git$/,''):null;
+      if(parts[2]==='tree' && parts[3]) branch=parts.slice(3).join('/');
+      else if(u.searchParams.get('branch')) branch=u.searchParams.get('branch');
+    }else{
+      // format user/repo or user/repo@branch or user/repo:branch
+      var tmp=input;
+      if(tmp.indexOf('@')>=0){
+        var sp=tmp.split('@');
+        tmp=sp[0];
+        branch=sp[1];
+      }else if(tmp.indexOf(':')>=0 && tmp.split(':').length===2){
+        var sp2=tmp.split(':');
+        // avoid port confusion, only if second part looks like branch
+        if(sp2[1] && sp2[1].indexOf('/')<0){ tmp=sp2[0]; branch=sp2[1]; }
+      }
+      var p=tmp.split('/').filter(Boolean);
+      owner=p[0]||null;
+      repo=p[1]?p[1].replace(/\.git$/,''):null;
+    }
+  }catch(e){}
+  if(!owner || !repo) return null;
+  return {owner:owner,repo:repo,branch:branch||null};
+}
+
+async function importFromGithub(){
+  var urlVal=$('importUrl').value.trim();
+  var branchVal=$('importBranch').value.trim()||'main';
+  var replace=$('importReplace').checked;
+  var info=parseGithubUrl(urlVal);
+  if(!info){
+    toast('Format salah. Contoh: https://github.com/user/repo');
+    $('importStatus').textContent='Format salah. Pakai user/repo atau link GitHub';
+    return;
+  }
+  var owner=info.owner;
+  var repo=info.repo;
+  var branch=info.branch||branchVal||'main';
+
+  var btn=$('importBtn');
+  btn.textContent='...';
+  btn.disabled=true;
+  $('importStatus').textContent='Mengunduh '+owner+'/'+repo+'@'+branch+' ...';
+
+  var branchesToTry=[branch];
+  if(branch!=='main') branchesToTry.push('main');
+  if(branch!=='master') branchesToTry.push('master');
+  // dedup
+  branchesToTry=branchesToTry.filter(function(v,i,a){return a.indexOf(v)===i});
+
+  function urlTemplates(br){
+    return [
+      'https://codeload.github.com/'+owner+'/'+repo+'/zip/'+br,
+      'https://github.com/'+owner+'/'+repo+'/archive/refs/heads/'+br+'.zip',
+      'https://api.github.com/repos/'+owner+'/'+repo+'/zipball/'+br
+    ];
+  }
+
+  var blob=null;
+  var successBranch=null;
+  outer: for(var i=0;i<branchesToTry.length;i++){
+    var br=branchesToTry[i];
+    var list=urlTemplates(br);
+    for(var j=0;j<list.length;j++){
+      var u=list[j];
+      try{
+        $('importStatus').textContent='Mencoba '+br+' → '+(u.indexOf('codeload')>=0?'codeload':u.indexOf('refs/heads')>=0?'github-archive':'api');
+        var r=await fetch(u,{redirect:'follow'});
+        if(!r.ok) continue;
+        var b=await r.blob();
+        if(b.size<200) continue;
+        // quick check if html error page
+        if(b.type.indexOf('text/html')>=0 && b.size<5000){
+          var t=await b.text();
+          if(t.indexOf('<!DOCTYPE')>=0 || t.toLowerCase().indexOf('not found')>=0) continue;
+        }
+        blob=b;
+        successBranch=br;
+        break outer;
+      }catch(e){
+        // try cors proxy fallback
+        try{
+          var proxy='https://corsproxy.io/?'+encodeURIComponent(u);
+          var r2=await fetch(proxy);
+          if(!r2.ok) continue;
+          var b2=await r2.blob();
+          if(b2.size>200){ blob=b2; successBranch=br; break outer; }
+        }catch(e2){}
+      }
+    }
+  }
+
+  if(!blob){
+    $('importStatus').textContent='Gagal download. Pastikan repo public & branch benar (coba main/master).';
+    btn.textContent='Clone';
+    btn.disabled=false;
+    toast('Gagal clone. Cek koneksi / repo private?');
+    return;
+  }
+
+  try{
+    var ab=await blob.arrayBuffer();
+    fflate.unzip(new Uint8Array(ab), function(err, unzipped){
+      if(err){
+        $('importStatus').textContent='Gagal unzip: '+err;
+        btn.textContent='Clone';
+        btn.disabled=false;
+        return;
+      }
+      var files={};
+      var keys=Object.keys(unzipped);
+      var rootPrefix='';
+      if(keys.length){
+        // detect top folder like repo-branch/
+        var first=keys[0];
+        var slash=first.indexOf('/');
+        if(slash>0) rootPrefix=first.slice(0,slash+1);
+      }
+      var count=0, skipped=0;
+      for(var k in unzipped){
+        var rel=k;
+        if(rootPrefix && k.indexOf(rootPrefix)===0) rel=k.slice(rootPrefix.length);
+        if(!rel) continue;
+        if(rel.charAt(rel.length-1)==='/') continue; // folder
+        // skip .git, node_modules big?
+        if(rel.indexOf('__MACOSX')===0) continue;
+        if(rel.split('/').some(function(p){return p==='.git';})) continue;
+        var data=unzipped[k];
+        if(data.length>2*1024*1024){ skipped++; continue; } // >2MB skip
+        var ext=rel.split('.').pop().toLowerCase();
+        var imageExts=['png','jpg','jpeg','webp','gif','ico','bmp'];
+        // for images (icon-192, icon-512) keep as base64 data url so tetap kebawa di repo
+        if(imageExts.indexOf(ext)>=0){
+          try{
+            // binary to base64
+            var bin='';
+            for(var bi=0;bi<data.length;bi++) bin+=String.fromCharCode(data[bi]);
+            var b64=btoa(bin);
+            var mime= ext==='png'?'image/png': ext==='jpg'||ext==='jpeg'?'image/jpeg': ext==='webp'?'image/webp': ext==='gif'?'image/gif':'image/'+ext;
+            // Simpan sebagai data url string, tapi editor akan tampilkan panjang, tetap kita simpan
+            // Untuk file icon, kita simpan base64 murni juga bisa, tapi data url lebih aman
+            // Di SPCK clone ini, kita simpan base64 data url
+            files[rel]='data:'+mime+';base64,'+b64;
+            // Juga simpan versi kosong placeholder untuk editor agar tidak berat? Tidak, simpan data url
+            count++;
+          }catch(e){ skipped++; }
+        }else{
+          try{
+            var txt=new TextDecoder().decode(data);
+            // filter binary with null char for non-text exts
+            if(txt.indexOf('\0')>=0){
+              var textExts=['html','htm','css','js','json','md','txt','toml','yaml','yml','xml','svg','ts','jsx','tsx','vue','cjs','mjs','less','scss'];
+              if(textExts.indexOf(ext)<0){ skipped++; continue; }
+            }
+            files[rel]=txt;
+            count++;
+          }catch(e){ skipped++; }
+        }
+      }
+
+      if(count===0){
+        $('importStatus').textContent='ZIP kosong atau hanya file binary. '+skipped+' dilewati.';
+        btn.textContent='Clone';
+        btn.disabled=false;
+        return;
+      }
+
+      if(replace){
+        S.files={};
+        S.open=[];
+        S.staged={};
+      }
+      // merge files - keep folder structure as file name (contoh: css/style.css tetap)
+      Object.keys(files).forEach(function(fn){
+        // Kalau file sudah ada dan isinya sama, skip
+        S.files[fn]=files[fn];
+        S.savedFiles[fn]=files[fn];
+      });
+
+      // Cari entry html
+      var htmlFiles=Object.keys(files).filter(function(f){return /\.html?$/i.test(f);});
+      var entry=null;
+      if(htmlFiles.indexOf('index.html')>=0) entry='index.html';
+      else if(htmlFiles.length) entry=htmlFiles[0];
+      else entry=Object.keys(files)[0];
+
+      S.active=entry;
+      if(S.open.indexOf(entry)<0) S.open.push(entry);
+
+      persist();
+      renderAll();
+      openInEditor();
+
+      var msg='Berhasil! '+count+' file dari '+owner+'/'+repo+'@'+successBranch;
+      if(skipped) msg+=' ('+skipped+' binary besar dilewati)';
+      msg+='. style.css & app.js terpisah tetap kebawa.';
+      $('importStatus').textContent=msg;
+      btn.textContent='Clone';
+      btn.disabled=false;
+      toast('Import '+count+' file berhasil');
+
+      // Auto-run preview if html
+      if(/\.html?$/i.test(entry)){
+        setTimeout(function(){ try{ runPreview(); }catch(e){} }, 500);
+      }
+    });
+  }catch(e){
+    $('importStatus').textContent='Error: '+e.message;
+    btn.textContent='Clone';
+    btn.disabled=false;
+  }
+}
+
+// hook events after DOM ready (code runs after definition)
+setTimeout(function(){
+  var b=$('importBtn');
+  if(b) b.onclick=importFromGithub;
+  var u=$('importUrl');
+  if(u) u.addEventListener('keydown', function(e){ if(e.key==='Enter') importFromGithub(); });
+}, 500);
+
+
 /* toolbar */
 function saveNow(){if(S.active){S.files[S.active]=cm.getValue();S.savedFiles[S.active]=cm.getValue()}clearTimeout(deb);persist();renderAll();toast('Tersimpan')}
 $('btnSave').onclick=saveNow;
@@ -855,5 +1126,5 @@ if('launchQueue' in window){
 openInEditor();renderAll();
 })();
 </script>
-</body>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}function isInlineMediaSlotElement(node){return !!(node&&node.getAttribute&&node.getAttribute("data-clippy-inline-media-slot")!==null)}function findInlineMediaSlot(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(isInlineMediaSlotElement(node))return node}return null}function readInlineMediaUrl(node){if(!node)return null;return node.getAttribute&&((node.getAttribute("data-clippy-inline-media-url")||node.getAttribute("data-url")||node.getAttribute("data_url")))||node.href||null}function stripHash(url){return String(url).replace(/#.*$/,"")}function urlsMatch(a,b){if(!a||!b)return false;try{return stripHash(new URL(a,loc).href)===stripHash(new URL(b,loc).href)}catch(_){return stripHash(a)===stripHash(b)}}function isFirstPartyReelUrl(value){try{var url=new URL(value,loc);if(url.protocol!=="https:")return false;var host=url.hostname.toLowerCase();var supported=host==="instagram.com"||host.endsWith(".instagram.com")||host==="facebook.com"||host.endsWith(".facebook.com");return supported&&/\/reels?\//i.test(url.pathname)}catch(_){return false}}function isInlineMediaUrlClick(node,href){var slot=findInlineMediaSlot(node);if(!slot)return false;var slotUrl=readInlineMediaUrl(slot);if(slotUrl)return urlsMatch(href,slotUrl);return isFirstPartyReelUrl(href)}function findDataHref(start){for(var node=start;node&&node!==document.body;node=node.parentElement){if(node.getAttribute){var href=node.getAttribute("data-href")||node.getAttribute("data-url");if(href)return{href:href,node:node}}}return null}var nativeOpen=window.open;window.open=function(url){if(parent!==window&&typeof url==="string"&&/^https?:\/\//.test(url)){parent.postMessage({type:"ecto:usercontent-link-click",href:url},"*");return null}return nativeOpen?nativeOpen.apply(window,arguments):null};document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;if(parent===window)return;var a=target.closest?target.closest("a[href]"):null;if(a&&a.href&&/^https?:\/\//.test(a.href)&&a.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(a,a.href))return;var productId=extractProductId(target)||extractProductId(a);if(productId){e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*");return}e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:a.href},"*");return}var dataHref=findDataHref(target);if(dataHref&&/^https?:\/\//.test(dataHref.href)&&dataHref.href.replace(/#.*$/,"")!==loc){if(isInlineMediaUrlClick(dataHref.node,dataHref.href))return;e.preventDefault();parent.postMessage({type:"ecto:usercontent-link-click",href:dataHref.href},"*")}},true)})();</script><script>(function(){var FOCUS_TYPE="ecto:artifact-focus-request";var CLOSE_TYPE="ecto:artifact-close-request";function focusArtifactDocument(){var body=document.body;if(!body)return;try{window.focus();}catch(e){}if(!body.hasAttribute("tabindex"))body.setAttribute("tabindex","-1");try{body.focus({preventScroll:true});}catch(e){try{body.focus();}catch(e2){}}}window.addEventListener("message",function(event){if(event.source!==window.parent)return;var data=event.data;if(!data||typeof data!=="object"||data.type!==FOCUS_TYPE)return;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",focusArtifactDocument,{once:true});return;}focusArtifactDocument();});window.addEventListener("keydown",function(event){if(event.key!=="Escape")return;window.setTimeout(function(){if(event.defaultPrevented)return;window.parent.postMessage({type:CLOSE_TYPE},"*");},0);});})();</script></body>
 </html>
