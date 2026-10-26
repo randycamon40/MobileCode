@@ -737,13 +737,12 @@ $('commitBtn').onclick=function(){
 };
 
 
-/* ===== GitHub Import / Clone Repository ===== */
+/* ===== GitHub Import / Clone Repository V3 - Support github.io + API fallback ===== */
 function parseGithubUrl(input){
   input=(input||'').trim();
   if(!input) return null;
-  var owner=null,repo=null,branch=null;
+  var owner=null,repo=null,branch=null,subpath='';
   try{
-    // Handle github.io Pages URLs: https://username.github.io/repo/  -> owner=username, repo=repo
     if(input.indexOf('github.io')>=0){
       try{
         var u=new URL(input);
@@ -754,12 +753,11 @@ function parseGithubUrl(input){
           var parts=u.pathname.split('/').filter(Boolean);
           if(parts.length>=1){
             repo=parts[0].replace(/\.git$/,'');
-            // if path has more like /repo/tree/branch etc, ignore
-            if(parts[1]==='tree' && parts[2]) branch=parts.slice(2).join('/');
+            subpath=parts.slice(1).join('/');
           }else{
-            // https://username.github.io/  -> repo is username.github.io
             repo=owner+'.github.io';
           }
+          if(u.searchParams.get('branch')) branch=u.searchParams.get('branch');
         }
       }catch(e){}
     }
@@ -768,37 +766,155 @@ function parseGithubUrl(input){
       var parts=u.pathname.split('/').filter(Boolean);
       owner=parts[0]||null;
       repo=parts[1]?parts[1].replace(/\.git$/,''):null;
-      if(parts[2]==='tree' && parts[3]) branch=parts.slice(3).join('/');
-      else if(u.searchParams.get('branch')) branch=u.searchParams.get('branch');
+      if(parts[2]==='tree' && parts[3]){ branch=parts.slice(3).join('/'); }
+      else if(parts[2]==='blob' && parts[3]){ 
+        branch=parts[3];
+        subpath=parts.slice(4).join('/');
+      }else if(parts.length>2){
+        // maybe subfolder after repo
+        // keep as subpath for later filtering
+        if(parts[2]!=='tree' && parts[2]!=='blob'){
+          // if user pasted repo with folder like github.com/user/repo/folder
+          subpath=parts.slice(2).join('/');
+        }
+      }
+      if(u.searchParams.get('branch')) branch=u.searchParams.get('branch');
     }
     if(!owner){
-      // format user/repo or user/repo@branch or user/repo:branch or just user/repo from github.io fallback
       var tmp=input;
       if(tmp.indexOf('@')>=0){
         var sp=tmp.split('@');
         tmp=sp[0];
         branch=sp[1];
-      }else if(tmp.indexOf(':')>=0 && tmp.split(':').length===2){
-        var sp2=tmp.split(':');
-        if(sp2[1] && sp2[1].indexOf('/')<0){ tmp=sp2[0]; branch=sp2[1]; }
       }
-      // remove https:// etc if any leftover
       tmp=tmp.replace(/^https?:\/\//,'').replace(/^www\./,'');
-      // remove github.com/ prefix if present
       tmp=tmp.replace(/^github\.com\//,'');
-      // remove github.io/ prefix if someone pasted username.github.io/repo without protocol
-      // e.g. randycamon40.github.io/HTMLeditor -> becomes randycamon40/HTMLeditor after removing .github.io
       tmp=tmp.replace(/\.github\.io\//,'/');
       tmp=tmp.replace(/\.github\.io$/,'');
       var p=tmp.split('/').filter(Boolean);
-      if(p.length>=2){ owner=p[0]||null; repo=p[1]?p[1].replace(/\.git$/,''):null; }
-      else if(p.length===1 && tmp.indexOf('/')<0){
-        // maybe user pasted "username/repo" style already handled? Actually p length 1 means invalid
+      if(p.length>=2){ 
+        owner=p[0]||null; 
+        repo=p[1]?p[1].replace(/\.git$/,''):null;
+        if(p.length>2) subpath=p.slice(2).join('/');
       }
     }
   }catch(e){}
   if(!owner || !repo) return null;
-  return {owner:owner,repo:repo,branch:branch||null};
+  return {owner:owner,repo:repo,branch:branch||null,subpath:subpath||''};
+}
+
+function getRepoCandidates(info){
+  var list=[];
+  // primary: owner/repo with subpath
+  list.push({owner:info.owner, repo:info.repo, subpath:info.subpath||'', type:'repo'});
+  // if repo is like HTMLeditor and host was github.io, also try owner.github.io repo with subpath = repo + subpath
+  if(info.owner && info.repo && info.repo!==info.owner+'.github.io'){
+    var combined = info.repo + (info.subpath?'/'+info.subpath:'');
+    list.push({owner:info.owner, repo:info.owner+'.github.io', subpath:combined, type:'pages-root'});
+  }
+  // also try without subpath for same repo (if subpath was actually branch mis-parse)
+  if(info.subpath){
+    list.push({owner:info.owner, repo:info.repo, subpath:'', type:'repo-root'});
+  }
+  // dedup
+  var seen={};
+  var uniq=[];
+  list.forEach(function(c){
+    var key=c.owner+'/'+c.repo+'/'+c.subpath;
+    if(!seen[key]){ seen[key]=1; uniq.push(c); }
+  });
+  return uniq;
+}
+
+async function fetchWithProxies(url, opts){
+  opts=opts||{};
+  // try direct first
+  try{
+    var r=await fetch(url, {redirect:'follow'});
+    if(r.ok) return r;
+  }catch(e){}
+  // proxies
+  var proxies=[
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+  ];
+  for(var i=0;i<proxies.length;i++){
+    try{
+      var pUrl=proxies[i]+encodeURIComponent(url);
+      var r2=await fetch(pUrl);
+      if(r2.ok) return r2;
+    }catch(e2){}
+  }
+  return null;
+}
+
+async function fetchContentsAPI(owner, repo, path, branch, filesMap, statusCb){
+  var apiUrl='https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+(path?path:'')+'?ref='+branch;
+  if(statusCb) statusCb('API: '+owner+'/'+repo+'/'+(path||'')+'@'+branch);
+  var r=await fetchWithProxies(apiUrl);
+  if(!r) return false;
+  try{
+    var data=await r.json();
+    if(!Array.isArray(data)){
+      // if single file
+      if(data && data.type==='file' && data.download_url){
+        var fr=await fetchWithProxies(data.download_url);
+        if(fr){
+          var txt=await fr.text();
+          var rel=path||data.name;
+          filesMap[rel]=txt;
+          return true;
+        }
+      }
+      return false;
+    }
+    // data is array of files/dirs
+    var hasFile=false;
+    for(var i=0;i<data.length;i++){
+      var item=data[i];
+      if(item.type==='file'){
+        if(item.size>2*1024*1024) continue;
+        // only text files + icons
+        var name=item.name.toLowerCase();
+        if(name.match(/\.(png|jpg|jpeg|webp|gif|ico)$/)){
+          try{
+            var br=await fetchWithProxies(item.download_url);
+            if(!br) continue;
+            var ab=await br.arrayBuffer();
+            var bin=''; var u8=new Uint8Array(ab);
+            for(var b=0;b<u8.length;b++) bin+=String.fromCharCode(u8[b]);
+            var b64=btoa(bin);
+            var mime=name.endsWith('.png')?'image/png': name.endsWith('.jpg')||name.endsWith('.jpeg')?'image/jpeg': name.endsWith('.webp')?'image/webp': name.endsWith('.gif')?'image/gif':'image/'+name.split('.').pop();
+            var fullPath=item.path;
+            // keep relative to requested path
+            var rel=item.path;
+            if(path && rel.indexOf(path)===0) rel=rel.slice(path.length+1);
+            filesMap[rel||item.name]='data:'+mime+';base64,'+b64;
+            hasFile=true;
+          }catch(e){}
+        }else{
+          try{
+            var fr=await fetchWithProxies(item.download_url);
+            if(!fr) continue;
+            var txt=await fr.text();
+            var rel=item.path;
+            if(path && rel.indexOf(path)===0) rel=rel.slice(path.length+1);
+            // if subpath import, keep full structure but strip top subpath
+            filesMap[rel||item.name]=txt;
+            hasFile=true;
+          }catch(e){}
+        }
+      }else if(item.type==='dir'){
+        // recurse
+        var subOk=await fetchContentsAPI(owner, repo, item.path, branch, filesMap, statusCb);
+        if(subOk) hasFile=true;
+      }
+    }
+    return hasFile;
+  }catch(e){
+    return false;
+  }
 }
 
 async function importFromGithub(){
@@ -807,189 +923,174 @@ async function importFromGithub(){
   var replace=$('importReplace').checked;
   var info=parseGithubUrl(urlVal);
   if(!info){
-    toast('Format salah. Contoh: https://github.com/user/repo');
-    $('importStatus').textContent='Format salah. Pakai user/repo atau link GitHub';
+    toast('Format salah. Contoh: github.com/user/repo atau randycamon40.github.io/HTMLeditor');
+    $('importStatus').textContent='Format salah. Pakai user/repo atau link github.io';
     return;
   }
-  var owner=info.owner;
-  var repo=info.repo;
-  var branch=info.branch||branchVal||'main';
 
   var btn=$('importBtn');
   btn.textContent='...';
   btn.disabled=true;
-  $('importStatus').textContent='Mengunduh '+owner+'/'+repo+'@'+branch+' ...';
+  $('importStatus').textContent='Mencoba parse '+info.owner+'/'+info.repo+' ...';
 
-  var branchesToTry=[branch];
-  if(branch!=='main') branchesToTry.push('main');
-  if(branch!=='master') branchesToTry.push('master');
-  // dedup
-  branchesToTry=branchesToTry.filter(function(v,i,a){return a.indexOf(v)===i});
+  var candidates=getRepoCandidates(info);
+  var branchesToTry=[info.branch||branchVal, 'main', 'master', 'gh-pages'].filter(function(v,i,a){ return v && a.indexOf(v)===i; });
 
-  function urlTemplates(br){
-    return [
-      'https://codeload.github.com/'+owner+'/'+repo+'/zip/'+br,
-      'https://github.com/'+owner+'/'+repo+'/archive/refs/heads/'+br+'.zip',
-      'https://api.github.com/repos/'+owner+'/'+repo+'/zipball/'+br
-    ];
+  var allFiles={};
+  var successInfo=null;
+
+  // 1. Try GitHub Contents API first (paling tahan CORS)
+  for(var ci=0; ci<candidates.length; ci++){
+    var cand=candidates[ci];
+    for(var bi=0; bi<branchesToTry.length; bi++){
+      var br=branchesToTry[bi];
+      var tmpMap={};
+      $('importStatus').textContent='Coba API: '+cand.owner+'/'+cand.repo+'/'+(cand.subpath||'')+'@'+br;
+      var ok=await fetchContentsAPI(cand.owner, cand.repo, cand.subpath, br, tmpMap, function(msg){ $('importStatus').textContent=msg; });
+      if(ok && Object.keys(tmpMap).length>0){
+        allFiles=tmpMap;
+        successInfo={owner:cand.owner, repo:cand.repo, branch:br, subpath:cand.subpath, method:'API'};
+        break;
+      }
+    }
+    if(Object.keys(allFiles).length>0) break;
   }
 
-  var blob=null;
-  var successBranch=null;
-  outer: for(var i=0;i<branchesToTry.length;i++){
-    var br=branchesToTry[i];
-    var list=urlTemplates(br);
-    for(var j=0;j<list.length;j++){
-      var u=list[j];
-      try{
-        $('importStatus').textContent='Mencoba '+br+' → '+(u.indexOf('codeload')>=0?'codeload':u.indexOf('refs/heads')>=0?'github-archive':'api');
-        var r=await fetch(u,{redirect:'follow'});
-        if(!r.ok) continue;
-        var b=await r.blob();
-        if(b.size<200) continue;
-        // quick check if html error page
-        if(b.type.indexOf('text/html')>=0 && b.size<5000){
-          var t=await b.text();
-          if(t.indexOf('<!DOCTYPE')>=0 || t.toLowerCase().indexOf('not found')>=0) continue;
+  // 2. If API failed, try ZIP via codeload + proxies
+  if(Object.keys(allFiles).length===0){
+    $('importStatus').textContent='API gagal, coba download ZIP...';
+    var urlTemplates=function(owner,repo,br){
+      return [
+        'https://codeload.github.com/'+owner+'/'+repo+'/zip/'+br,
+        'https://github.com/'+owner+'/'+repo+'/archive/refs/heads/'+br+'.zip',
+        'https://api.github.com/repos/'+owner+'/'+repo+'/zipball/'+br
+      ];
+    };
+    outer: for(var ci2=0; ci2<candidates.length; ci2++){
+      var cand2=candidates[ci2];
+      for(var bi2=0; bi2<branchesToTry.length; bi2++){
+        var br2=branchesToTry[bi2];
+        var urls=urlTemplates(cand2.owner, cand2.repo, br2);
+        for(var ui=0; ui<urls.length; ui++){
+          var u=urls[ui];
+          try{
+            $('importStatus').textContent='Coba ZIP: '+cand2.owner+'/'+cand2.repo+'@'+br2+' ('+(u.indexOf('codeload')>=0?'codeload':'archive')+')';
+            var r=await fetchWithProxies(u);
+            if(!r || !r.ok) continue;
+            var b=await r.blob();
+            if(b.size<200) continue;
+            // unzip
+            var ab=await b.arrayBuffer();
+            var result=await new Promise(function(res){
+              fflate.unzip(new Uint8Array(ab), function(err, unzipped){
+                if(err) res(null);
+                else res(unzipped);
+              });
+            });
+            if(!result) continue;
+            var keys=Object.keys(result);
+            var rootPrefix='';
+            if(keys.length){ var first=keys[0]; var slash=first.indexOf('/'); if(slash>0) rootPrefix=first.slice(0,slash+1); }
+            var tmpFiles={};
+            for(var k in result){
+              var rel=k;
+              if(rootPrefix && k.indexOf(rootPrefix)===0) rel=k.slice(rootPrefix.length);
+              if(!rel) continue;
+              if(rel.charAt(rel.length-1)==='/') continue;
+              if(rel.indexOf('__MACOSX')===0) continue;
+              if(rel.split('/').some(function(p){return p==='.git';})) continue;
+              // if candidate has subpath, filter only files inside subpath
+              if(cand2.subpath && rel.indexOf(cand2.subpath+'/')!==0 && rel!==cand2.subpath) {
+                // if subpath is like HTMLeditor, keep files that start with it
+                if(cand2.subpath && rel.indexOf(cand2.subpath)===0){
+                  rel=rel.slice(cand2.subpath.length+1);
+                }else{
+                  // skip if not in subpath
+                  // but for root repo candidate without subpath, keep all
+                  if(cand2.subpath) continue;
+                }
+              }
+              var data=result[k];
+              if(data.length>2*1024*1024) continue;
+              var ext=rel.split('.').pop().toLowerCase();
+              var imageExts=['png','jpg','jpeg','webp','gif','ico','bmp'];
+              if(imageExts.indexOf(ext)>=0){
+                try{
+                  var bin=''; for(var ii=0;ii<data.length;ii++) bin+=String.fromCharCode(data[ii]);
+                  var b64=btoa(bin);
+                  var mime= ext==='png'?'image/png': ext==='jpg'||ext==='jpeg'?'image/jpeg': ext==='webp'?'image/webp': ext==='gif'?'image/gif':'image/'+ext;
+                  tmpFiles[rel]='data:'+mime+';base64,'+b64;
+                }catch(e){}
+              }else{
+                try{
+                  var txt=new TextDecoder().decode(data);
+                  if(txt.indexOf(' ')>=0){
+                    var textExts=['html','htm','css','js','json','md','txt','toml','yaml','yml','xml','svg','ts','jsx','tsx','vue','cjs','mjs','less','scss'];
+                    if(textExts.indexOf(ext)<0) continue;
+                  }
+                  tmpFiles[rel]=txt;
+                }catch(e){}
+              }
+            }
+            if(Object.keys(tmpFiles).length>0){
+              allFiles=tmpFiles;
+              successInfo={owner:cand2.owner, repo:cand2.repo, branch:br2, subpath:cand2.subpath, method:'ZIP'};
+              break outer;
+            }
+          }catch(e){ continue; }
         }
-        blob=b;
-        successBranch=br;
-        break outer;
-      }catch(e){
-        // try cors proxy fallback
-        try{
-          var proxy='https://corsproxy.io/?'+encodeURIComponent(u);
-          var r2=await fetch(proxy);
-          if(!r2.ok) continue;
-          var b2=await r2.blob();
-          if(b2.size>200){ blob=b2; successBranch=br; break outer; }
-        }catch(e2){}
       }
     }
   }
 
-  if(!blob){
-    $('importStatus').textContent='Gagal download. Repo '+owner+'/'+repo+' tidak ketemu. Kalau link kamu https://'+owner+'.github.io/'+repo+'/ , pakai format '+owner+'/'+repo+' . Pastikan repo public.';
+  if(Object.keys(allFiles).length===0){
+    $('importStatus').textContent='Gagal. Repo '+info.owner+'/'+info.repo+' tidak ketemu atau private. Coba format: randycamon40/HTMLeditor atau https://github.com/randycamon40/HTMLeditor';
     btn.textContent='Clone';
     btn.disabled=false;
-    toast('Gagal clone. Cek koneksi / repo private?');
+    toast('Gagal clone. Pastikan repo public, bukan cuma Pages.');
     return;
   }
 
-  try{
-    var ab=await blob.arrayBuffer();
-    fflate.unzip(new Uint8Array(ab), function(err, unzipped){
-      if(err){
-        $('importStatus').textContent='Gagal unzip: '+err;
-        btn.textContent='Clone';
-        btn.disabled=false;
-        return;
-      }
-      var files={};
-      var keys=Object.keys(unzipped);
-      var rootPrefix='';
-      if(keys.length){
-        // detect top folder like repo-branch/
-        var first=keys[0];
-        var slash=first.indexOf('/');
-        if(slash>0) rootPrefix=first.slice(0,slash+1);
-      }
-      var count=0, skipped=0;
-      for(var k in unzipped){
-        var rel=k;
-        if(rootPrefix && k.indexOf(rootPrefix)===0) rel=k.slice(rootPrefix.length);
-        if(!rel) continue;
-        if(rel.charAt(rel.length-1)==='/') continue; // folder
-        // skip .git, node_modules big?
-        if(rel.indexOf('__MACOSX')===0) continue;
-        if(rel.split('/').some(function(p){return p==='.git';})) continue;
-        var data=unzipped[k];
-        if(data.length>2*1024*1024){ skipped++; continue; } // >2MB skip
-        var ext=rel.split('.').pop().toLowerCase();
-        var imageExts=['png','jpg','jpeg','webp','gif','ico','bmp'];
-        // for images (icon-192, icon-512) keep as base64 data url so tetap kebawa di repo
-        if(imageExts.indexOf(ext)>=0){
-          try{
-            // binary to base64
-            var bin='';
-            for(var bi=0;bi<data.length;bi++) bin+=String.fromCharCode(data[bi]);
-            var b64=btoa(bin);
-            var mime= ext==='png'?'image/png': ext==='jpg'||ext==='jpeg'?'image/jpeg': ext==='webp'?'image/webp': ext==='gif'?'image/gif':'image/'+ext;
-            // Simpan sebagai data url string, tapi editor akan tampilkan panjang, tetap kita simpan
-            // Untuk file icon, kita simpan base64 murni juga bisa, tapi data url lebih aman
-            // Di SPCK clone ini, kita simpan base64 data url
-            files[rel]='data:'+mime+';base64,'+b64;
-            // Juga simpan versi kosong placeholder untuk editor agar tidak berat? Tidak, simpan data url
-            count++;
-          }catch(e){ skipped++; }
-        }else{
-          try{
-            var txt=new TextDecoder().decode(data);
-            // filter binary with null char for non-text exts
-            if(txt.indexOf('\0')>=0){
-              var textExts=['html','htm','css','js','json','md','txt','toml','yaml','yml','xml','svg','ts','jsx','tsx','vue','cjs','mjs','less','scss'];
-              if(textExts.indexOf(ext)<0){ skipped++; continue; }
-            }
-            files[rel]=txt;
-            count++;
-          }catch(e){ skipped++; }
-        }
-      }
+  // Merge to S.files
+  if(replace){
+    S.files={};
+    S.open=[];
+    S.staged={};
+  }
+  Object.keys(allFiles).forEach(function(fn){
+    // clean leading ./
+    var clean=fn.replace(/^\.\//,'');
+    S.files[clean]=allFiles[clean];
+    S.savedFiles[clean]=allFiles[clean];
+  });
 
-      if(count===0){
-        $('importStatus').textContent='ZIP kosong atau hanya file binary. '+skipped+' dilewati.';
-        btn.textContent='Clone';
-        btn.disabled=false;
-        return;
-      }
+  var htmlFiles=Object.keys(allFiles).filter(function(f){return /\.html?$/i.test(f);});
+  var entry=null;
+  if(htmlFiles.indexOf('index.html')>=0) entry='index.html';
+  else if(htmlFiles.length) entry=htmlFiles[0];
+  else entry=Object.keys(allFiles)[0];
 
-      if(replace){
-        S.files={};
-        S.open=[];
-        S.staged={};
-      }
-      // merge files - keep folder structure as file name (contoh: css/style.css tetap)
-      Object.keys(files).forEach(function(fn){
-        // Kalau file sudah ada dan isinya sama, skip
-        S.files[fn]=files[fn];
-        S.savedFiles[fn]=files[fn];
-      });
+  S.active=entry;
+  if(S.open.indexOf(entry)<0) S.open.push(entry);
 
-      // Cari entry html
-      var htmlFiles=Object.keys(files).filter(function(f){return /\.html?$/i.test(f);});
-      var entry=null;
-      if(htmlFiles.indexOf('index.html')>=0) entry='index.html';
-      else if(htmlFiles.length) entry=htmlFiles[0];
-      else entry=Object.keys(files)[0];
+  persist();
+  renderAll();
+  openInEditor();
 
-      S.active=entry;
-      if(S.open.indexOf(entry)<0) S.open.push(entry);
+  var msg='Berhasil '+Object.keys(allFiles).length+' file dari '+successInfo.owner+'/'+successInfo.repo+'@'+successInfo.branch+' via '+successInfo.method;
+  if(successInfo.subpath) msg+=' /'+successInfo.subpath;
+  msg+='. style.css & app.js terpisah tetap kebawa.';
+  $('importStatus').textContent=msg;
+  btn.textContent='Clone';
+  btn.disabled=false;
+  toast('Import '+Object.keys(allFiles).length+' file berhasil');
 
-      persist();
-      renderAll();
-      openInEditor();
-
-      var msg='Berhasil! '+count+' file dari '+owner+'/'+repo+'@'+successBranch;
-      if(skipped) msg+=' ('+skipped+' binary besar dilewati)';
-      msg+='. style.css & app.js terpisah tetap kebawa.';
-      $('importStatus').textContent=msg;
-      btn.textContent='Clone';
-      btn.disabled=false;
-      toast('Import '+count+' file berhasil');
-
-      // Auto-run preview if html
-      if(/\.html?$/i.test(entry)){
-        setTimeout(function(){ try{ runPreview(); }catch(e){} }, 500);
-      }
-    });
-  }catch(e){
-    $('importStatus').textContent='Error: '+e.message;
-    btn.textContent='Clone';
-    btn.disabled=false;
+  if(/\.html?$/i.test(entry)){
+    setTimeout(function(){ try{ runPreview(); }catch(e){} }, 600);
   }
 }
 
-// hook events after DOM ready (code runs after definition)
+// hook events after DOM ready
 setTimeout(function(){
   var b=$('importBtn');
   if(b) b.onclick=importFromGithub;
