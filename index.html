@@ -225,6 +225,17 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
       <div id="importStatus" class="hint">V3 FIX: Tempel github.com/user/repo ATAU github.io link. Kalau gagal, coba format user/repo public. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
     </div>
 
+    <div class="import-box" id="pushBox" style="margin-top:10px">
+      <div class="gitsec" style="padding:0 0 6px 0">Push ke GitHub</div>
+      <input class="in" id="ghToken" type="password" placeholder="GitHub PAT ghp_xxxx (disimpan di HP)">
+      <input class="in" id="ghRepo" placeholder="owner/repo tujuan, mis: randycamon40/HTMLeditor" style="margin-top:6px">
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input class="in" id="ghBranch" placeholder="branch: main" style="flex:1">
+        <button class="btn" id="ghSave" style="width:auto;margin:0;padding:10px 12px;flex:none;font-size:11px">Save</button>
+      </div>
+      <div id="pushStatus" class="hint" style="margin-top:6px">Buat PAT di github.com > Settings > Developer settings > Personal access tokens > Tokens (classic) > checklist repo. Token cuma di HP kamu.</div>
+    </div>
+
     <div class="hint">Branch: main · origin</div>
     <div class="gitsec">Staged</div>
     <div id="gitStaged"></div>
@@ -717,7 +728,91 @@ document.querySelectorAll('.dtabs button').forEach(function(b){b.onclick=functio
 }});
 
 /* git */
-$('commitBtn').onclick=function(){
+/* ===== GitHub Push via PAT ===== */
+function b64EncodeUnicode(str){
+  try{
+    return btoa(unescape(encodeURIComponent(str)));
+  }catch(e){
+    // fallback for binary
+    return btoa(str);
+  }
+}
+function getPushConfig(){
+  var token=($('ghToken')&&$('ghToken').value.trim())|| (S.ghToken||'');
+  var repo=($('ghRepo')&&$('ghRepo').value.trim())|| (S.ghRepo||'');
+  var branch=($('ghBranch')&&$('ghBranch').value.trim())|| (S.ghBranch||'main');
+  return {token:token, repo:repo, branch:branch||'main'};
+}
+function savePushConfig(){
+  var cfg=getPushConfig();
+  S.ghToken=cfg.token;
+  S.ghRepo=cfg.repo;
+  S.ghBranch=cfg.branch;
+  persist();
+  if(cfg.token) toast('Config Push disimpan');
+  else toast('Isi token dulu');
+}
+async function ghGetFileSha(owner, repo, path, branch, token){
+  try{
+    var url='https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+encodeURIComponent(path).replace(/%2F/g,'/')+'?ref='+branch;
+    var r=await fetch(url,{headers:{'Authorization':'token '+token, 'Accept':'application/vnd.github.v3+json'}});
+    if(r.status===404) return null;
+    if(!r.ok) return {error:r.status};
+    var j=await r.json();
+    return j.sha||null;
+  }catch(e){ return null; }
+}
+async function ghPushFile(owner, repo, path, contentStr, message, branch, token){
+  // contentStr is file content (text or data url)
+  var isDataUrl=contentStr.indexOf('data:')===0 && contentStr.indexOf('base64,')>0;
+  var b64;
+  if(isDataUrl){
+    b64=contentStr.split('base64,')[1];
+  }else{
+    b64=b64EncodeUnicode(contentStr);
+  }
+  var sha=await ghGetFileSha(owner, repo, path, branch, token);
+  if(sha && sha.error) return {ok:false, status:sha.error};
+  var body={message:message, content:b64, branch:branch};
+  if(sha) body.sha=sha;
+  try{
+    var url='https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+encodeURIComponent(path).replace(/%2F/g,'/');
+    var r=await fetch(url,{method:'PUT', headers:{'Authorization':'token '+token, 'Accept':'application/vnd.github.v3+json', 'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    var j=await r.json();
+    return {ok:r.ok, status:r.status, data:j};
+  }catch(e){ return {ok:false, error:e.message}; }
+}
+async function doPushToGithub(stagedNames, commitMsg){
+  var cfg=getPushConfig();
+  if(!cfg.token || !cfg.repo){
+    $('pushStatus').textContent='Skip push: token/repo kosong. Cuma commit lokal.';
+    return false;
+  }
+  var parts=cfg.repo.split('/').filter(Boolean);
+  if(parts.length<2){ $('pushStatus').textContent='Format repo salah. Harus owner/repo'; return false; }
+  var owner=parts[0], repo=parts[1];
+  $('pushStatus').textContent='Pushing '+stagedNames.length+' file ke '+cfg.repo+'@'+cfg.branch+'...';
+  var okCount=0, failCount=0;
+  for(var i=0;i<stagedNames.length;i++){
+    var p=stagedNames[i];
+    // skip data url that is huge? but allow icon
+    if(p.length>500) { /* path too long skip */ }
+    $('pushStatus').textContent='Push '+p+' ('+(i+1)+'/'+stagedNames.length+')...';
+    var res=await ghPushFile(owner, repo, p, S.files[p]||'', commitMsg, cfg.branch, cfg.token);
+    if(res.ok) okCount++; else { failCount++; console.log('push fail',p,res); }
+  }
+  if(failCount===0){
+    $('pushStatus').textContent='Push berhasil! '+okCount+' file ke '+cfg.repo+'@'+cfg.branch+'. Cek github.com/'+cfg.repo;
+    toast('Push '+okCount+' file berhasil');
+    return true;
+  }else{
+    $('pushStatus').textContent='Push selesai: '+okCount+' ok, '+failCount+' gagal. Cek token & repo public.';
+    toast('Push: '+okCount+' ok, '+failCount+' gagal');
+    return false;
+  }
+}
+
+$('commitBtn').onclick=async function(){
  var msg=$('commitMsg').value.trim();
  var stagedNames=Object.keys(S.staged).filter(function(n){return S.staged[n]});
  if(!stagedNames.length){toast('Belum ada file di-stage');return}
@@ -734,7 +829,30 @@ $('commitBtn').onclick=function(){
  $('commitMsg').value='';
  persist();renderAll();
  toast('Commit '+hash+' dibuat');
+
+ // coba push jika ada token
+ var cfg=getPushConfig();
+ if(cfg.token && cfg.repo){
+   await doPushToGithub(stagedNames, msg);
+ }else{
+   $('pushStatus').textContent='Commit lokal ok. Isi PAT + repo kalau mau push ke GitHub.';
+ }
 };
+
+// Save push config button
+setTimeout(function(){
+  var saveBtn=$('ghSave');
+  if(saveBtn) saveBtn.onclick=savePushConfig;
+  // load saved config to inputs
+  if(S.ghToken && $('ghToken')) $('ghToken').value=S.ghToken;
+  if(S.ghRepo && $('ghRepo')) $('ghRepo').value=S.ghRepo;
+  if(S.ghBranch && $('ghBranch')) $('ghBranch').value=S.ghBranch;
+  // auto-fill ghRepo from last import if empty
+  if(!$('ghRepo').value && S.lastImportRepo){
+    $('ghRepo').value=S.lastImportRepo;
+  }
+}, 800);
+
 
 
 /* ===== GitHub Import / Clone Repository V3 - Support github.io + API fallback ===== */
@@ -1151,6 +1269,7 @@ async function importFromGithub(){
 
   S.active=entry;
   if(S.open.indexOf(entry)<0) S.open.push(entry);
+  if(successInfo) S.lastImportRepo=successInfo.owner+'/'+successInfo.repo;
 
   persist();
   renderAll();
