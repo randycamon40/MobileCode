@@ -1,4 +1,4 @@
-const CACHE = 'mobile-code-v1.0.3';
+const CACHE = 'mobile-code-v1.0.4';
 const HTML_URL = '/';
 const PRE_CACHE = ['/manifest.json', '/icon-192.png', '/icon-512.png'];
 
