@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
 <style>
 :root{--bg:#1e1e1e;--panel:#252526;--panel2:#2d2d30;--text:#d4d4d4;--muted:#8a8a8a;--accent:#4f9cf7;--border:#3a3a3d;--shadow:0 6px 20px rgba(0,0,0,.45);color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
 :root[data-theme="light"]{--bg:#f5f5f5;--panel:#ffffff;--panel2:#ebebed;--text:#222;--muted:#6b6b6b;--accent:#1769d6;--border:#d6d6da;--shadow:0 6px 20px rgba(0,0,0,.15);color-scheme:light}
@@ -46,7 +47,7 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
 .CodeMirror{height:100%;font-family:'JetBrains Mono',monospace;font-size:14px}
 :root[data-theme="light"] .CodeMirror{background:#fff;color:#222}
 :root[data-theme="light"] .CodeMirror-gutters{background:#f0f0f2;border-right:1px solid var(--border)}
-#keys{display:flex;gap:6px;overflow-x:auto;padding:6px;background:var(--panel);border-top:1px solid var(--border);scrollbar-width:none}
+#keys{display:flex;gap:6px;overflow-x:auto;padding:6px;background:var(--panel);border-top:1px solid var(--border);scrollbar-width:none;touch-action:pan-x;overscroll-behavior-x:contain}
 #keys::-webkit-scrollbar{display:none}
 #keys button{min-width:42px;height:38px;border-radius:16px;background:var(--panel2);font-weight:600;flex:none;padding:0 10px;transition:transform .12s,background .2s}
 #keys button:active{transform:scale(.9);background:var(--accent);color:#fff}
@@ -71,8 +72,9 @@ main{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
 .row .ib{width:32px;height:32px}.row svg{width:16px;height:16px}
 .btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;border-radius:16px;background:var(--accent);color:#fff;font-weight:600;margin:6px 0 10px;transition:transform .15s}
 .btn:active{transform:scale(.97)}
-input.in{width:100%;padding:11px 14px;border-radius:16px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
-input.in:focus{border-color:var(--accent)}
+input.in,textarea.in{width:100%;padding:11px 14px;border-radius:16px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
+textarea.in{resize:vertical;line-height:1.5}
+input.in:focus,textarea.in:focus{border-color:var(--accent)}
 mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
 .hint{color:var(--muted);font-size:12px;padding:6px 4px}
 .mod{color:#f0b429;font-weight:600;width:16px;text-align:center}
@@ -89,6 +91,59 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
 .acts{display:flex;gap:8px;margin-top:14px}
 .acts button{flex:1;padding:10px;border-radius:16px;background:var(--panel2)}
 .acts .ok{background:var(--accent);color:#fff;font-weight:600}
+.diff{font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.5;max-height:60vh;overflow:auto;background:var(--bg);border-radius:12px;padding:10px;margin-top:8px;white-space:pre-wrap;word-break:break-word;text-align:left;user-select:text;-webkit-user-select:text}
+.diff .add{background:rgba(61,220,132,.22);color:#3ddc84;display:block}
+.diff .del{background:rgba(248,113,113,.22);color:#f87171;display:block;text-decoration:line-through;opacity:.85}
+.gitsec{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:8px 4px 4px;display:flex;justify-content:space-between;align-items:center}
+.gitrow{display:flex;align-items:center;gap:2px;padding:2px 2px 2px 10px;border-radius:12px}
+.gitrow .gname{flex:1;padding:6px 0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;background:none;border:0;color:var(--text)}
+.gitrow .gbtn{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;flex:none;background:none;border:0;color:var(--text)}
+.gitrow .gbtn:active{background:var(--panel2)}
+.gitrow .gbtn svg{width:14px;height:14px}
+.hash{font-size:11px;color:var(--muted);font-family:monospace;min-width:52px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;backdrop-filter:blur(2px)}
+.modal.show{display:flex}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:16px;width:100%;max-width:400px;padding:16px;box-shadow:var(--shadow)}
+.modal-box h3{margin:0 0 12px;font-size:15px;display:flex;justify-content:space-between}
+.modal-box h3 span{cursor:pointer;color:var(--muted)}
+.console{background:var(--bg);border-top:2px solid var(--accent);height:150px;display:flex;flex-direction:column;font-family:monospace;font-size:11px;position:absolute;bottom:0;left:0;right:0;z-index:10;transform:translateY(100%);transition:transform .3s}
+.console.show{transform:translateY(0)}
+.console-head{display:flex;justify-content:space-between;padding:4px 8px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--muted)}
+.console-log{flex:1;overflow:auto;padding:6px;line-height:1.4}
+.console-line{border-bottom:1px solid var(--border);padding:2px 0;word-break:break-all}
+.console-line.error{color:#f87171}
+.console-line.warn{color:#f0b429}
+.ctx-menu{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:6px;z-index:120;display:none;min-width:160px}
+.ctx-menu.show{display:block}
+.ctx-menu button{display:block;width:100%;text-align:left;padding:8px 12px;border-radius:8px;font-size:12px;color:var(--text)}
+.ctx-menu button:hover{background:var(--panel2)}
+#cmdPalette{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:110;padding-top:60px}
+#cmdPalette.show{display:flex}
+.cmd-box{background:var(--panel);border:1px solid var(--border);border-radius:16px;width:100%;max-width:400px;overflow:hidden;box-shadow:var(--shadow)}
+.cmd-in{width:100%;padding:14px;background:var(--bg);border:0;border-bottom:1px solid var(--border);color:var(--text);outline:none}
+.cmd-list{max-height:300px;overflow-y:auto}
+.cmd-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.cmd-item:hover{background:var(--panel2)}
+.tab .dot-unsaved{width:6px;height:6px;border-radius:50%;background:#3ddc84}
+.batch-actions{display:grid;grid-template-columns:1fr 1fr 1.2fr 44px;gap:6px;margin-top:8px}
+.batch-actions .btn{width:100%;min-width:0;padding:8px 4px;font-size:12px;margin:0;min-height:36px;gap:4px;overflow:hidden}
+.batch-actions .btn.icon{padding:0;font-size:15px}
+.batch-prompt-bar{display:flex;margin:6px 0 0}
+.batch-prompt-bar .btn{width:100%;padding:10px;font-size:12px;margin:0;min-height:36px;background:var(--accent);color:#fff;border-color:var(--accent)}
+.batch-status{margin-top:8px;padding:9px 12px;border-radius:12px;text-align:center;font-size:12px;font-weight:600;background:var(--panel2);border:1px solid var(--border);color:var(--muted);min-height:18px;line-height:1.4}
+.batch-status.ok{color:#3ddc84;border-color:rgba(61,220,132,.45)}
+.batch-status.err{color:#f87171;border-color:rgba(248,113,113,.45)}
+.batch-status.warn{color:#f0b429;border-color:rgba(240,180,41,.45)}
+.batch-detail{display:none;margin-top:8px;max-height:200px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:6px}
+.batch-detail.show{display:block}
+.batch-item{display:flex;gap:8px;align-items:flex-start;padding:5px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;margin-bottom:2px;background:var(--panel2)}
+.batch-item .ic{flex-shrink:0;font-size:12px;width:14px;text-align:center;font-weight:700}
+.batch-item .n{flex-shrink:0;font-weight:700;color:var(--muted);min-width:22px}
+.batch-item .sn{flex:1;min-width:0;word-break:break-all}
+.batch-item.ok .ic,.batch-item.ok .sn{color:#3ddc84}
+.batch-item.miss .ic,.batch-item.miss .sn{color:#f87171}
+.batch-item.bad .ic,.batch-item.bad .sn{color:#f0b429}
+#btnFont, #btnFind, #btnTheme, #btnPalette { display: none !important; }
 </style>
 </head>
 <body>
@@ -96,14 +151,18 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
   <button class="ib" id="btnMenu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   <span class="logo">Spck</span>
   <div id="tabs"></div>
+  <button class="ib" id="btnFont" aria-label="Font">A</button>
+  <button class="ib" id="btnFind" aria-label="Find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></button>
   <button class="ib run" id="btnRun" aria-label="Run"><svg viewBox="0 0 24 24" style="fill:currentColor"><path d="M7 4l13 8-13 8z"/></svg></button>
   <button class="ib" id="btnSave" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 3h11l4 4v14H5zM8 3v5h7M8 21v-7h8v7"/></svg></button>
   <button class="ib" id="btnTheme" aria-label="Tema"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg></button>
-  <button class="ib" id="btnMore" aria-label="Lainnya"><svg viewBox="0 0 24 24" style="fill:currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+        <button class="ib" id="btnPalette" aria-label="Menu Perintah"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <button class="ib" id="btnMore" aria-label="Lainnya"><svg viewBox="0 0 24 24" style="fill:currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
 </header>
 
 <main>
   <div id="editorWrap"><textarea id="code"></textarea></div>
+  <div class="console" id="previewConsole"><div class="console-head"><span>Console</span><span style="cursor:pointer" onclick="document.getElementById('previewConsole').classList.remove('show')">✕</span></div><div class="console-log" id="consoleLog"></div></div>
   <div id="preview">
     <div class="phead"><b>Preview</b>
       <button class="ib" id="pRefresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/></svg></button>
@@ -120,6 +179,7 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
     <button data-p="explorer" class="on">Explorer</button>
     <button data-p="git">Git</button>
     <button data-p="search">Search</button>
+    <button data-p="batch">Batch</button>
   </div>
   <section class="pane on" id="p-explorer">
     <button class="btn" id="newFile">+ File baru</button>
@@ -127,22 +187,57 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
   </section>
   <section class="pane" id="p-git">
     <div class="hint">Branch: main · origin</div>
+    <div class="gitsec">Staged</div>
+    <div id="gitStaged"></div>
+    <div class="gitsec"><span>Changes</span><button id="stageAll" style="font-size:10px;color:var(--accent);padding:2px 6px;border-radius:8px">Stage semua</button></div>
     <div id="gitList"></div>
     <input class="in" id="commitMsg" placeholder="Pesan commit…" style="margin-top:8px">
+    <div class="gitsec">History</div>
+    <div id="gitHistory"></div>
     <button class="btn" id="commitBtn">Commit &amp; Push</button>
   </section>
   <section class="pane" id="p-search">
     <input class="in" id="searchIn" placeholder="Cari nama file…" style="margin-top:4px">
     <div id="searchList" style="margin-top:8px"></div>
   </section>
+  <section class="pane" id="p-batch">
+    <div class="hint">Paste format CARI:/GANTI DENGAN: — pisah blok dengan ---</div>
+    <div class="batch-prompt-bar">
+      <button class="btn" id="batchPromptBtn" type="button" title="Tap: Copy prompt · Hold: Edit prompt">AI Prompt</button>
+    </div>
+    <textarea class="in" id="batchInput" placeholder="CARI:&#10;teks asli&#10;&#10;GANTI DENGAN:&#10;teks baru&#10;&#10;---&#10;&#10;CARI:&#10;...&#10;&#10;GANTI DENGAN:&#10;..." style="min-height:200px;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
+    <div class="batch-actions">
+      <button class="btn" id="batchPasteBtn" type="button">📋 Paste</button>
+      <button class="btn" id="batchCheckBtn" type="button">🔍 Cek</button>
+      <button class="btn" id="batchApplyBtn" type="button">⚡ Terapkan</button>
+      <!-- ai-prompt dipindah ke atas textarea -->
+      <button class="btn icon" id="batchClearBtn" type="button" title="Hapus">🗑</button>
+    </div>
+    <div class="batch-status" id="batchStatus">—</div>
+    <div class="batch-detail" id="batchDetail"></div>
+  </section>
 </aside>
 
 <div id="menu">
-  <button id="mDl">Download file aktif</button>
-  <button id="mCloseTab">Tutup tab aktif</button>
-  <button id="mReset">Reset ke default</button>
+  <button id="mFind">🔍 Find / Replace</button>
+  <button id="mPalette">⌨️ Command Palette</button>
+  <button id="mFont">🔤 Perbesar Font</button>
+  <button id="mTheme">🌗 Ganti Tema</button>
+  
+  <button id="mJump">🔢 Lompat ke baris...</button>
+  <button id="mTemplate">📄 Template Cepat</button>
+  <button id="mDl">⬇️ Download file aktif</button>
+  <button id="mCloseTab">✕ Tutup tab aktif</button>
+  <button id="mReset">🗑 Reset ke default</button>
 </div>
-<div id="dlg"><div class="card"><h3 id="dTitle"></h3><input class="in" id="dIn"><p id="dMsg" class="hint" style="display:none"></p><div class="acts"><button id="dNo">Batal</button><button class="ok" id="dYes">OK</button></div></div></div>
+<div id="tplModal" class="modal"><div class="modal-box"><h3>Template <span onclick="document.getElementById('tplModal').classList.remove('show')">✕</span></h3><button class="btn" onclick="applyTemplate('html5')">HTML5 Dasar</button><button class="btn" onclick="applyTemplate('form')">Form Kontak</button><button class="btn" onclick="applyTemplate('card')">Kartu Profil</button></div></div>
+<div id="cmdPalette"><div class="cmd-box"><input class="cmd-in" id="cmdInput" placeholder="Ketik perintah..."><div class="cmd-list" id="cmdList"></div></div></div>
+<div id="ctxMenu" class="ctx-menu">
+  <button data-ctx="close">Tutup</button>
+  <button data-ctx="others">Tutup Lainnya</button>
+  <button data-ctx="all">Tutup Semua</button>
+</div>
+<div id="dlg"><div class="card"><h3 id="dTitle"></h3><input class="in" id="dIn"><textarea class="in" id="dTa" style="display:none;min-height:180px;max-height:50vh;margin-top:0;font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical"></textarea><p id="dMsg" class="hint" style="display:none"></p><div class="acts"><button id="dNo">Batal</button><button class="ok" id="dYes">OK</button></div></div></div>
 <div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -151,6 +246,22 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/xml-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/indent-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/comment-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/emmet-codemirror@1.1.0/dist/emmet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
 <script>
 (function(){
 var KEY='spck_clone_v1';
@@ -160,19 +271,22 @@ var DEFAULTS={
  'script.js':'let n = 0;\ndocument.getElementById("btn").addEventListener("click", () => {\n  n++;\n  document.getElementById("out").textContent = "Diklik " + n + "x";\n});\nconsole.log("script.js jalan");\n',
  'README.md':'# Mobile Code\n\nIDE mobile sederhana.\n\n- Edit HTML, CSS, JS\n- Tekan Run untuk preview\n- Semua file tersimpan di localStorage\n'
 };
-var S={files:{},open:[],active:'',committed:{},theme:'dark'};
+var S={files:{},open:[],active:'',committed:{},theme:'dark',staged:{},history:[],savedFiles:{},fontSize:14,themeMode:'manual',closedTabs:[]};
 function load(){
  try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.files)S=Object.assign(S,o)}}catch(e){}
  if(!Object.keys(S.files).length){S.files=Object.assign({},DEFAULTS);S.committed=Object.assign({},DEFAULTS);S.open=Object.keys(DEFAULTS).slice(0,3);S.active='index.html'}
  if(!S.files[S.active])S.active=Object.keys(S.files)[0]||'';
+ if(!S.savedFiles)S.savedFiles=Object.assign({},S.files);
+ if(!S.closedTabs)S.closedTabs=[];
  S.open=S.open.filter(function(n){return S.files[n]!==undefined});
  if(S.active&&S.open.indexOf(S.active)<0)S.open.push(S.active);
 }
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+var quotaWarned=false;
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){if(!quotaWarned){toast('Penyimpanan penuh!');quotaWarned=true;}}}
 var $=function(i){return document.getElementById(i)};
 function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('show')},1800)}
 function esc(s){return s.replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-function modeOf(n){var e=n.split('.').pop().toLowerCase();return{html:'htmlmixed',htm:'htmlmixed',css:'css',js:'javascript',json:{name:'javascript',json:true}}[e]||'text/plain'}
+function modeOf(n){var e=n.split('.').pop().toLowerCase();return{html:'htmlmixed',htm:'htmlmixed',css:'css',js:'javascript',json:{name:'javascript',json:true},md:'markdown',yaml:'yaml',sql:'sql'}[e]||'text/plain'}
 function isMod(n){return S.files[n]!==S.committed[n]}
 
 load();
@@ -185,10 +299,12 @@ function applyTheme(){
 }
 applyTheme();
 
-var cm=CodeMirror.fromTextArea($('code'),{lineNumbers:true,theme:S.theme==='dark'?'darcula':'default',lineWrapping:true,autoCloseBrackets:true,indentUnit:2,tabSize:2,indentWithTabs:false,extraKeys:{Tab:function(c){c.replaceSelection('  ')}}});
+var cm=CodeMirror.fromTextArea($('code'),{lineNumbers:true,theme:S.theme==='dark'?'darcula':'default',lineWrapping:true,autoCloseBrackets:true,matchBrackets:true,autoCloseTags:true,foldGutter:true,gutters:['CodeMirror-linenumbers','CodeMirror-foldgutter'],indentUnit:2,tabSize:2,indentWithTabs:false,extraKeys:{Tab:function(c){c.replaceSelection('  ')},'Ctrl-Space':'emmetExpand'}});
+cm.getWrapperElement().style.fontSize=S.fontSize+'px';
 var loading=false,deb;
 function openInEditor(){
  loading=true;
+ cm.setOption('readOnly',false);
  var f=S.active;
  cm.setOption('mode',modeOf(f||'x.txt'));
  cm.setValue(f?S.files[f]:'');
@@ -197,15 +313,17 @@ function openInEditor(){
  setTimeout(function(){cm.refresh()},10);
 }
 cm.on('change',function(){
- if(loading||!S.active)return;
+ if(loading||!S.active||!S.files.hasOwnProperty(S.active))return;
  S.files[S.active]=cm.getValue();
+ S.savedFiles[S.active]=cm.getValue();
  clearTimeout(deb);deb=setTimeout(function(){persist();renderAll()},500);
 });
 
 function renderTabs(){
  var h='';
  S.open.forEach(function(n){
-  h+='<button class="tab'+(n===S.active?' active':'')+'" data-n="'+esc(n)+'">'+(isMod(n)?'<span class="dot"></span>':'')+esc(n)+'<span class="x" data-x="'+esc(n)+'">×</span></button>';
+  var unsaved = S.savedFiles[n] !== S.files[n];
+  h+='<button class="tab'+(n===S.active?' active':'')+'" data-n="'+esc(n)+'">'+(unsaved?'<span class="dot-unsaved"></span>':(isMod(n)?'<span class="dot"></span>':''))+esc(n)+'<span class="x" data-x="'+esc(n)+'">×</span></button>';
  });
  $('tabs').innerHTML=h;
  var a=$('tabs').querySelector('.active');if(a)a.scrollIntoView({inline:'nearest',block:'nearest'});
@@ -215,10 +333,34 @@ $('tabs').addEventListener('click',function(e){
  if(x){closeTab(x.dataset.x);return}
  var t=e.target.closest('.tab');if(t)switchTo(t.dataset.n);
 });
+var tabLongPress=null;
+$('tabs').addEventListener('touchstart',function(e){
+ var t=e.target.closest('.tab');
+ if(t){tabLongPress=setTimeout(function(){var cx=e.touches[0].clientX,cy=e.touches[0].clientY;var m=$('ctxMenu');m.style.left=cx+'px';m.style.top=cy+'px';m.classList.add('show');m.dataset.n=t.dataset.n;},500);}
+},{passive:true});
+$('tabs').addEventListener('touchend',function(){clearTimeout(tabLongPress)});
+$('tabs').addEventListener('touchmove',function(){clearTimeout(tabLongPress)});
+document.addEventListener('click',function(e){if(!e.target.closest('#ctxMenu'))$('ctxMenu').classList.remove('show')});
+$('ctxMenu').addEventListener('click',function(e){var btn=e.target.closest('[data-ctx]');if(!btn)return;var n=this.dataset.n;var act=btn.dataset.ctx;this.classList.remove('show');if(act==='close')closeTab(n);else if(act==='others'){S.open=S.open.filter(function(x){return x===n});S.active=n;openInEditor();persist();renderAll()}else if(act==='all'){S.open=[];S.active='';cm.setValue('');persist();renderAll()}});
 function closeTab(n){
  var i=S.open.indexOf(n);if(i<0)return;
+ if(S.active)S.files[S.active]=cm.getValue();
+ persist();
+ S.closedTabs.push(n); if(S.closedTabs.length>10)S.closedTabs.shift();
  S.open.splice(i,1);
- if(S.active===n){S.active=S.open[Math.max(0,i-1)]||'';if(!S.active&&!S.open.length){var k=Object.keys(S.files)[0];if(k){S.active=k;S.open=[k]}}openInEditor()}
+ if(S.active===n){
+  if(S.open.length){
+   S.active=S.open[Math.min(i,S.open.length-1)];
+   openInEditor();
+  }else{
+   S.active='';
+   loading=true;
+   cm.setOption('readOnly',true);
+   cm.setOption('mode','text/plain');
+   cm.setValue('// Tidak ada file terbuka\n// Pilih file dari Explorer atau buat file baru.');
+   loading=false;
+  }
+ }
  persist();renderAll();
 }
 function switchTo(n){
@@ -229,7 +371,8 @@ function switchTo(n){
 function renderFiles(){
  var h='';
  Object.keys(S.files).forEach(function(n){
-  h+='<div class="row'+(n===S.active?' active':'')+'"><button class="nm" data-open="'+esc(n)+'">📄 '+esc(n)+'</button>'
+  var sz = S.files[n] ? (new Blob([S.files[n]]).size/1024).toFixed(1)+'k' : '0k';
+  h+='<div class="row'+(n===S.active?' active':'')+'"><button class="nm" data-open="'+esc(n)+'">📄 '+esc(n)+' <span style="opacity:.5;font-size:10px">'+sz+'</span></button>'
    +'<button class="ib" data-ren="'+esc(n)+'" aria-label="Rename"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/></svg></button>'
    +'<button class="ib" data-del="'+esc(n)+'" aria-label="Hapus"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button></div>';
  });
@@ -241,26 +384,239 @@ $('fileList').addEventListener('click',function(e){
  else if(t.dataset.ren)renameFile(t.dataset.ren);
  else if(t.dataset.del)deleteFile(t.dataset.del);
 });
-function renderGit(){
- var m=Object.keys(S.files).filter(isMod);
- var gone=Object.keys(S.committed).filter(function(n){return S.files[n]===undefined});
- var h='';
- m.forEach(function(n){h+='<div class="row"><span class="mod">'+(S.committed[n]===undefined?'A':'M')+'</span><span class="nm" style="padding:8px 0">'+esc(n)+'</span></div>'});
- gone.forEach(function(n){h+='<div class="row"><span class="mod" style="color:#f87171">D</span><span class="nm" style="padding:8px 0">'+esc(n)+'</span></div>'});
- $('gitList').innerHTML=h||'<div class="hint">Tidak ada perubahan.</div>';
+function hashOf(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0}return ('0000000'+(h>>>0).toString(16)).slice(-7)}
+function gitStatus(n){if(!S.files.hasOwnProperty(n))return 'D';if(!S.committed.hasOwnProperty(n))return 'A';if(S.files[n]!==S.committed[n])return 'M';return null}
+function diffLines(a,b){a=(a||'').split('\n');b=(b||'').split('\n');var m=a.length,n=b.length,dp=[],i,j;for(i=0;i<=m;i++){dp[i]=[];for(j=0;j<=n;j++)dp[i][j]=0}for(i=m-1;i>=0;i--)for(j=n-1;j>=0;j--)dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);var out=[];i=0;j=0;while(i<m&&j<n){if(a[i]===b[j]){out.push({t:' ',s:a[i]});i++;j++}else if(dp[i+1][j]>=dp[i][j+1]){out.push({t:'-',s:a[i]});i++}else{out.push({t:'+',s:b[j]});j++}}while(i<m)out.push({t:'-',s:a[i++]});while(j<n)out.push({t:'+',s:b[j++]});return out}
+function showDiff(n){
+ var oldV=S.committed[n]!==undefined?S.committed[n]:'';
+ var newV=S.files.hasOwnProperty(n)?S.files[n]:'';
+ var d=diffLines(oldV,newV);
+ var html=d.map(function(x){var cls=x.t==='+'?'add':x.t==='-'?'del':'';var pre=x.t==='+'?'+ ':x.t==='-'?'- ':'  ';return '<span class="'+cls+'">'+esc(pre+x.s)+'</span>'}).join('');
+ $('dTitle').textContent='Diff: '+n;
+ var inp=$('dIn'),m=$('dMsg');
+ var oldInpDisp=inp.style.display;inp.style.display='none';
+ var oldMClass=m.className,oldMDisp=m.style.display,oldMHTML=m.innerHTML;
+ m.className='diff';m.style.display='block';m.innerHTML=html||'<span style="color:var(--muted)">Tidak ada perubahan.</span>';
+ var yes=$('dYes'),no=$('dNo');
+ var oldYes=yes.textContent,oldNoDisp=no.style.display;
+ yes.textContent='Tutup';no.style.display='none';
+ $('dlg').classList.add('show');
+ function close(){
+  $('dlg').classList.remove('show');
+  inp.style.display=oldInpDisp;
+  m.className=oldMClass;m.style.display=oldMDisp;m.innerHTML=oldMHTML;
+  yes.textContent=oldYes;no.style.display=oldNoDisp;
+  yes.onclick=no.onclick=null;
+ }
+ yes.onclick=close;
 }
+function renderGit(){
+ var staged=[],changed=[];
+ Object.keys(S.files).forEach(function(n){var st=gitStatus(n);if(!st)return;if(S.staged[n])staged.push(n);else changed.push(n)});
+ var h='';
+ staged.forEach(function(n){h+='<div class="gitrow"><span class="mod">'+(S.committed[n]===undefined?'A':'M')+'</span><button class="gname" data-diff="'+esc(n)+'">'+esc(n)+'</button><button class="gbtn" data-unstage="'+esc(n)+'" title="Unstage"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button></div>'});
+ $('gitStaged').innerHTML=h||'<div class="hint" style="padding:2px 4px">Belum ada yang di-stage.</div>';
+ h='';
+ changed.forEach(function(n){h+='<div class="gitrow"><span class="mod">'+(S.committed[n]===undefined?'A':'M')+'</span><button class="gname" data-diff="'+esc(n)+'">'+esc(n)+'</button><button class="gbtn" data-discard="'+esc(n)+'" title="Discard"><svg viewBox="0 0 24 24"><path d="M3 3v6h6M3.5 9a9 9 0 1116.4 6"/></svg></button><button class="gbtn" data-stage="'+esc(n)+'" title="Stage"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>'});
+ $('gitList').innerHTML=h||'<div class="hint" style="padding:2px 4px">Tidak ada perubahan.</div>';
+ h='';
+ (S.history||[]).forEach(function(c,idx){h+='<div class="gitrow"><span class="hash">'+esc(c.hash||'?')+'</span><button class="gname" data-log="'+idx+'" style="padding-left:6px">'+esc(c.msg||'')+'</button></div>'});
+ $('gitHistory').innerHTML=h||'<div class="hint" style="padding:2px 4px">Belum ada commit.</div>';
+}
+$('gitStaged').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.diff)showDiff(t.dataset.diff);else if(t.dataset.unstage){delete S.staged[t.dataset.unstage];persist();renderAll()}});
+$('gitList').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.diff)showDiff(t.dataset.diff);else if(t.dataset.stage){S.staged[t.dataset.stage]=true;persist();renderAll()}else if(t.dataset.discard){var n=t.dataset.discard;dialog('Buang perubahan?',{input:false,msg:n,ok:'Buang'}).then(function(ok){if(!ok)return;if(S.committed.hasOwnProperty(n))S.files[n]=S.committed[n];else delete S.files[n];delete S.staged[n];if(S.active===n)openInEditor();persist();renderAll();toast('Dibuang')})}});
+$('gitHistory').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.log!==undefined){var c=(S.history||[])[+t.dataset.log];if(!c)return;var f=Object.keys(c.files||{});dialog('Commit '+c.hash,{input:false,msg:c.msg+' — '+f.join(', '),ok:'Tutup'}).then(function(){})}});
+var sa=$('stageAll');if(sa)sa.onclick=function(){Object.keys(S.files).forEach(function(n){if(gitStatus(n))S.staged[n]=true});persist();renderAll();toast('Semua di-stage')};
 function renderSearch(){
  var q=$('searchIn').value.trim().toLowerCase(),h='';
+ if(!q){$('searchList').innerHTML='<div class="hint">Ketik untuk mencari nama file atau isi...</div>';return}
  Object.keys(S.files).forEach(function(n){
-  var i=n.toLowerCase().indexOf(q);
-  if(q&&i<0)return;
-  var label=q?esc(n.slice(0,i))+'<mark>'+esc(n.slice(i,i+q.length))+'</mark>'+esc(n.slice(i+q.length)):esc(n);
+  var content=S.files[n].toLowerCase();
+  var nameMatch=n.toLowerCase().indexOf(q)>=0;
+  var contentMatch=content.indexOf(q)>=0;
+  if(!nameMatch && !contentMatch)return;
+  var label=esc(n);
+  if(nameMatch){
+   var i=n.toLowerCase().indexOf(q);
+   label=esc(n.slice(0,i))+'<mark>'+esc(n.slice(i,i+q.length))+'</mark>'+esc(n.slice(i+q.length));
+  }
   h+='<div class="row"><button class="nm" data-open="'+esc(n)+'">📄 '+label+'</button></div>';
  });
  $('searchList').innerHTML=h||'<div class="hint">Tidak ada hasil.</div>';
 }
 $('searchList').addEventListener('click',function(e){var t=e.target.closest('[data-open]');if(t){switchTo(t.dataset.open);closeDrawer()}});
 $('searchIn').addEventListener('input',renderSearch);
+
+/* ===== Batch Replace (pane Batch) ===== */
+function parseBatchPairs(raw){
+ var lines=raw.replace(/\r\n?/g,'\n').split('\n');
+ var pairs=[],cur=null,mode=null,buf=[];
+ function flush(){
+  if(!cur)return;
+  var t=buf.join('\n').replace(/^\n+|\n+$/g,'');
+  if(mode==='find')cur.find=t;
+  else if(mode==='replace')cur.replace=t;
+  buf=[];
+ }
+ function push(){
+  flush();
+  if(cur&&(typeof cur.find==='string'||typeof cur.replace==='string'))pairs.push(cur);
+  cur=null;mode=null;buf=[];
+ }
+ for(var i=0;i<lines.length;i++){
+  var line=lines[i];
+  line=line.replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"').replace(/'/g,"'");
+  var trim=line.trim()
+   .replace(/^[-*•>\s]+/,'')
+   .replace(/^[`*_]+/,'')
+   .replace(/[`*_\s]+$/,'');
+  if(/^-{3,}\s*$/.test(trim)){push();continue}
+  if(/^CARI\s*:\s*$/i.test(trim)){push();cur={};mode='find';continue}
+  if(/^GANTI\s+DENGAN\s*:\s*$/i.test(trim)||/^GANTI\s*:\s*$/i.test(trim)){flush();mode='replace';continue}
+  if(/^#{1,6}\s/.test(trim)){push();continue}
+  if(/^(Fungsi|Lokasi|Catatan|Note|Notes)\s*:/i.test(trim)){push();continue}
+  if(mode)buf.push(line);
+ }
+ push();
+ return pairs;
+}
+function batchSetStatus(txt,type){
+ var el=$('batchStatus');if(!el)return;
+ el.textContent=txt;
+ el.className='batch-status'+(type?' '+type:'');
+}
+function batchRenderDetail(items){
+ var el=$('batchDetail');if(!el)return;
+ if(!items||!items.length){el.innerHTML='';el.classList.remove('show');return}
+ var ic={ok:'✓',miss:'✕',bad:'!'};
+ var h='';
+ items.forEach(function(it){
+  h+='<div class="batch-item '+it.status+'"><span class="ic">'+(ic[it.status]||'·')+'</span><span class="n">#'+it.n+'</span><span class="sn">'+esc(it.snippet)+'</span></div>';
+ });
+ el.innerHTML=h;el.classList.add('show');
+}
+function batchPreview(){
+ var raw=$('batchInput').value;
+ if(!raw.trim()){batchSetStatus('Kosong — paste dulu formatnya','');batchRenderDetail(null);return}
+ var pairs=parseBatchPairs(raw);
+ if(!pairs.length){batchSetStatus('❌ Tidak ada blok CARI/GANTI','err');batchRenderDetail(null);return}
+ var sim=(S.active&&S.files.hasOwnProperty(S.active))?cm.getValue():'';
+ var complete=0,found=0,miss=0,bad=0,items=[];
+ pairs.forEach(function(p,i){
+  var hasF=(typeof p.find==='string'&&p.find.length>0);
+  var hasR=(typeof p.replace==='string');
+  var st,sn;
+  if(hasF&&hasR){
+   complete++;
+   var idx=sim.indexOf(p.find);
+   if(idx!==-1){found++;st='ok';sim=sim.slice(0,idx)+p.replace+sim.slice(idx+p.find.length)}
+   else{miss++;st='miss'}
+   sn=p.find;
+  }else{bad++;st='bad';sn=hasF?p.find:(hasR?'(CARI kosong)':'(kosong)')}
+  if(sn.length>60)sn=sn.slice(0,57)+'...';
+  items.push({n:i+1,status:st,snippet:sn.replace(/\n/g,'⏎')});
+ });
+ var msg='📋 '+pairs.length+' blok · '+complete+' lengkap · '+found+' cocok';
+ if(miss)msg+=' · '+miss+' tidak ketemu';
+ if(bad)msg+=' · '+bad+' tidak lengkap';
+ batchSetStatus(msg,(complete>0&&found>0)?'ok':'err');
+ batchRenderDetail(items);
+}
+$('batchCheckBtn').onclick=batchPreview;
+$('batchPasteBtn').onclick=function(){
+ if(navigator.clipboard&&navigator.clipboard.readText){
+  navigator.clipboard.readText().then(function(t){
+   if(!t){toast('Clipboard kosong');return}
+   $('batchInput').value=t;$('batchInput').focus();
+   batchPreview();toast('Paste '+t.length+' karakter');
+  }).catch(function(){toast('Clipboard diblokir');});
+ }else{toast('Paste manual di textarea')}
+};
+$('batchClearBtn').onclick=function(){
+ if(!$('batchInput').value){toast('Sudah kosong');return}
+ $('batchInput').value='';batchSetStatus('—','');batchRenderDetail(null);
+};
+var PROMPT_BATCH_DEFAULT='KONTEKS:\n'+
+'Saya mengedit file HTML single-file di Android. Editor saya punya fitur "Batch Replace" yang mengeksekusi blok CARI/GANTI BERURUTAN dari atas ke bawah. Setiap blok dicek TERHADAP STATE FILE SAAT ITU, bukan terhadap file awal.\n'+
+'Konsekuensinya: kalau blok #2 anchor-nya berada di area yang sudah diubah oleh blok #1, anchor #2 WAJIB merujuk ke teks SETELAH perubahan blok #1 (bukan teks asli).\n'+
+'\n'+
+'Total: [N] perubahan\n'+
+'\n'+
+'FORMAT WAJIB TIAP PERUBAHAN:\n'+
+'- Baris "Perubahan N: judul singkat" di LUAR code block\n'+
+'- Baris "Lokasi: ..." di LUAR code block\n'+
+'- Satu code block (tiga backtick) berisi HANYA CARI + GANTI DENGAN\n'+
+'- Baris "Fungsi: ..." di LUAR code block\n'+
+'\n'+
+'Pisahkan tiap Perubahan dengan garis ---\n'+
+'\n'+
+'ATURAN KETAT:\n'+
+'1. Anchor CARI harus UNIK di file. Kalau muncul 2x+, perpanjang anchor sampai unik.\n'+
+'2. CARI idealnya SATU BARIS. JANGAN gabung dengan tag penutup (</style>, </div>).\n'+
+'2b. Label "CARI:" dan "GANTI DENGAN:" WAJIB berdiri SENDIRI di barisnya.\n'+
+'2c. Kalau single-line tidak bisa unik, boleh 2-3 baris berurutan identik.\n'+
+'2d. WAJIB kirim SEMUA perubahan dalam SATU code block panjang, pisah tiap blok dengan ---.\n'+
+'2e. URUTAN BLOK WAJIB TOP-DOWN. JANGAN acak.\n'+
+'2f. Anchor #2 harus sesuai state SETELAH blok #1 diterapkan.\n'+
+'3. JANGAN "sisipkan di antara X dan Y". Ubah jadi CARI:[X], GANTI:[X+teks baru].\n'+
+'4. KIRIM SEMUA dalam 1 balasan, 1 code block. Saya akan paste ke textarea Batch lalu tap Terapkan sekali.\n'+
+'5. JANGAN ubah bagian yang tidak saya minta.\n'+
+'6. Kalau saya minta "fix error", TANYA DULU detailnya.\n'+
+'7. Catatan/peringatan tulis sebagai "Catatan penting:" di LUAR code block, setelah "Fungsi:".\n'+
+'8. Output RINGKAS. Langsung CARI-GANTI.\n'+
+'9. Kalau kode panjang, PECAH jadi blok kecil. Anchor tiap blok unik PADA SAAT DIEKSEKUSI.\n'+
+'10. Akhiri dengan 1-2 langkah TES singkat.\n'+
+'\n'+
+'BAHASA: Indonesia santai. Istilah teknis tetap bahasa Inggris.\n'+
+'\n'+
+'Kalau paham, balas "SIAP" dan tunggu kode/perintah.';
+var PROMPT_BATCH_KEY='spck_prompt_batch';
+function promptBatchGet(){var v='';try{v=localStorage.getItem(PROMPT_BATCH_KEY)||''}catch(e){}return v||PROMPT_BATCH_DEFAULT}
+function legacyCopy(txt){var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.left='-9999px';ta.style.top='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('Prompt dicopy ke clipboard')}catch(e){toast('Gagal copy — copy manual dari modal')}document.body.removeChild(ta)}
+function copyText(txt){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){toast('Prompt dicopy ke clipboard')}).catch(function(){legacyCopy(txt)})}else{legacyCopy(txt)}}
+(function(){
+ var btn=$('batchPromptBtn');if(!btn)return;
+ var timer=null,wasLong=false,lastTouch=0;
+ function editPrompt(){
+  dialog('AI Prompt (Batch Replace)',{multiline:true,value:promptBatchGet(),ok:'Simpan',msg:'Tap lama di textarea untuk edit. Kosongkan lalu Simpan = reset default.'}).then(function(v){
+   if(v===null)return;
+   if(!v.trim()){try{localStorage.removeItem(PROMPT_BATCH_KEY)}catch(e){}toast('Prompt direset ke default');return}
+   try{localStorage.setItem(PROMPT_BATCH_KEY,v);toast('Prompt disimpan ('+v.length+' char)')}catch(e){toast('Gagal simpan prompt')}
+  });
+ }
+ function start(){wasLong=false;if(timer)clearTimeout(timer);timer=setTimeout(function(){timer=null;wasLong=true;try{navigator.vibrate&&navigator.vibrate(25)}catch(e){}editPrompt()},500)}
+ function end(e){if(timer){clearTimeout(timer);timer=null}if(wasLong){if(e&&e.preventDefault)e.preventDefault();wasLong=false;return}copyText(promptBatchGet())}
+ function cancel(){if(timer){clearTimeout(timer);timer=null}wasLong=false}
+ btn.addEventListener('touchstart',function(){lastTouch=Date.now();start()},{passive:true});
+ btn.addEventListener('touchend',end);
+ btn.addEventListener('touchcancel',cancel);
+ btn.addEventListener('mousedown',function(){if(Date.now()-lastTouch<800)return;start()});
+ btn.addEventListener('mouseup',function(e){if(Date.now()-lastTouch<800)return;end(e)});
+ btn.addEventListener('mouseleave',cancel);
+ btn.addEventListener('contextmenu',function(e){e.preventDefault()});
+})();
+$('batchApplyBtn').onclick=function(){
+ if(!S.active||!S.files.hasOwnProperty(S.active)){toast('Tidak ada file aktif');return}
+ var raw=$('batchInput').value;
+ if(!raw.trim()){toast('Paste dulu format CARI/GANTI');return}
+ var pairs=parseBatchPairs(raw);
+ if(!pairs.length){toast('Tidak ada blok CARI/GANTI valid');return}
+ var text=cm.getValue();
+ var applied=0,miss=0,skip=0;
+ pairs.forEach(function(p){
+  if(typeof p.find!=='string'||typeof p.replace!=='string'){skip++;return}
+  var idx=text.indexOf(p.find);
+  if(idx!==-1){text=text.slice(0,idx)+p.replace+text.slice(idx+p.find.length);applied++}
+  else miss++;
+ });
+ if(applied===0){batchSetStatus('0 diterapkan'+(miss?' · '+miss+' tidak ketemu':'')+(skip?' · '+skip+' dilewati':''),'err');return}
+ cm.setValue(text);
+ var msg=applied+' berhasil';
+ if(miss)msg+=' · '+miss+' tidak ketemu';
+ if(skip)msg+=' · '+skip+' dilewati';
+ batchSetStatus(msg,miss>0?'warn':'ok');
+ toast(msg);
+};
 function renderAll(){renderTabs();renderFiles();renderGit();renderSearch()}
 
 /* dialog */
@@ -268,15 +624,19 @@ function dialog(title,opt){
  return new Promise(function(res){
   opt=opt||{};
   $('dTitle').textContent=title;
-  var inp=$('dIn');inp.style.display=opt.input===false?'none':'block';inp.value=opt.value||'';
+  var inp=$('dIn'),ta=$('dTa'),useTa=!!opt.multiline;
+  inp.style.display=(opt.input===false||useTa)?'none':'block';
+  ta.style.display=useTa?'block':'none';
+  if(useTa){ta.value=opt.value||''}else{inp.value=opt.value||''}
   var m=$('dMsg');m.style.display=opt.msg?'block':'none';m.textContent=opt.msg||'';
   $('dYes').textContent=opt.ok||'OK';
   $('dlg').classList.add('show');
-  if(opt.input!==false)setTimeout(function(){inp.focus();inp.select()},50);
-  function done(v){$('dlg').classList.remove('show');$('dYes').onclick=$('dNo').onclick=inp.onkeydown=null;res(v)}
-  $('dYes').onclick=function(){done(opt.input===false?true:inp.value.trim())};
+  if(opt.input!==false)setTimeout(function(){(useTa?ta:inp).focus();if(!useTa)inp.select()},50);
+  function done(v){$('dlg').classList.remove('show');$('dYes').onclick=$('dNo').onclick=inp.onkeydown=ta.onkeydown=null;res(v)}
+  $('dYes').onclick=function(){done(opt.input===false?true:(useTa?ta.value:inp.value.trim()))};
   $('dNo').onclick=function(){done(null)};
   inp.onkeydown=function(e){if(e.key==='Enter')$('dYes').onclick()};
+  if(useTa)ta.onkeydown=function(e){if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();$('dYes').onclick()}};
  });
 }
 function validName(n,except){
@@ -320,23 +680,43 @@ document.querySelectorAll('.dtabs button').forEach(function(b){b.onclick=functio
 /* git */
 $('commitBtn').onclick=function(){
  var msg=$('commitMsg').value.trim();
- if(!Object.keys(S.files).some(isMod)&&!Object.keys(S.committed).some(function(n){return S.files[n]===undefined})){toast('Tidak ada perubahan');return}
+ var stagedNames=Object.keys(S.staged).filter(function(n){return S.staged[n]});
+ if(!stagedNames.length){toast('Belum ada file di-stage');return}
  if(!msg){toast('Isi pesan commit');return}
- S.committed=Object.assign({},S.files);$('commitMsg').value='';
- persist();renderAll();toast('Pushed to origin main');
+ var snap={};
+ stagedNames.forEach(function(n){if(S.files.hasOwnProperty(n))snap[n]=S.files[n]});
+ var content=stagedNames.map(function(n){return n+':'+(S.files[n]||'')}).join('\n');
+ var hash=hashOf(content+msg+Date.now());
+ stagedNames.forEach(function(n){if(S.files.hasOwnProperty(n))S.committed[n]=S.files[n];else delete S.committed[n]});
+ S.staged={};
+ if(!S.history)S.history=[];
+ S.history.unshift({hash:hash,msg:msg,time:Date.now(),files:snap});
+ if(S.history.length>50)S.history.length=50;
+ $('commitMsg').value='';
+ persist();renderAll();
+ toast('Commit '+hash+' dibuat');
 };
 
 /* toolbar */
-function saveNow(){if(S.active)S.files[S.active]=cm.getValue();clearTimeout(deb);persist();renderAll();toast('Tersimpan')}
+function saveNow(){if(S.active){S.files[S.active]=cm.getValue();S.savedFiles[S.active]=cm.getValue()}clearTimeout(deb);persist();renderAll();toast('Tersimpan')}
 $('btnSave').onclick=saveNow;
-$('btnTheme').onclick=function(){
- S.theme=S.theme==='dark'?'light':'dark';
- applyTheme();
- cm.setOption('theme',S.theme==='dark'?'darcula':'default');
- persist();
-};
+$('mTheme').onclick=function(){$('menu').classList.remove('show');S.themeMode='manual';S.theme=S.theme==='dark'?'light':'dark';applyTheme();cm.setOption('theme',S.theme==='dark'?'darcula':'default');persist();};
+
+$('mFont').onclick=function(){$('menu').classList.remove('show');S.fontSize=S.fontSize>=20?12:S.fontSize+2;cm.getWrapperElement().style.fontSize=S.fontSize+'px';cm.refresh();persist();toast('Font: '+S.fontSize+'px')};
+$('mPalette').onclick=function(){$('menu').classList.remove('show');openPalette()};
+$('mFind').onclick=function(){$('menu').classList.remove('show');cm.execCommand('find')};
 $('btnMore').onclick=function(e){e.stopPropagation();$('menu').classList.toggle('show')};
+function openPalette(){var el=$('cmdPalette');el.classList.add('show');$('cmdInput').value='';renderPalette('');$('cmdInput').focus();}
+function renderPalette(q){var cmds=[{t:'Undo Tutup Tab',f:function(){if(S.closedTabs.length)switchTo(S.closedTabs.pop())}},{t:'Toggle Word Wrap',f:function(){cm.setOption('lineWrapping',!cm.getOption('lineWrapping'));toast('Word Wrap Toggle')}},{t:'Export ZIP',f:function(){exportZip()}}];var h='';cmds.filter(function(c){return c.t.toLowerCase().indexOf(q.toLowerCase())>=0}).forEach(function(c,i){h+='<div class="cmd-item" data-i="'+i+'">'+c.t+'</div>'});$('cmdList').innerHTML=h;Array.from(document.querySelectorAll('.cmd-item')).forEach(function(el){el.onclick=function(){cmds[this.dataset.i].f();$('cmdPalette').classList.remove('show')}})}
+$('cmdInput').oninput=function(){renderPalette(this.value)};
+$('cmdInput').onkeydown=function(e){if(e.key==='Escape')$('cmdPalette').classList.remove('show');if(e.key==='Enter'){var first=document.querySelector('.cmd-item');if(first)first.click()}};
+$('cmdPalette').onclick=function(e){if(e.target===this)this.classList.remove('show')};
 document.addEventListener('click',function(e){if(!e.target.closest('#menu')&&e.target.id!=='btnMore')$('menu').classList.remove('show')});
+function exportZip(){var zipData={};Object.keys(S.files).forEach(function(k){zipData[k]=new TextEncoder().encode(S.files[k])});fflate.zip(zipData,function(err,data){if(err){toast('Gagal ZIP');return}var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/zip'}));a.download='project.zip';a.click();toast('ZIP Diexport')})}
+function importZip(file){var r=new FileReader();r.onload=function(e){fflate.unzip(new Uint8Array(e.target.result),function(err,unzipped){if(err){toast('Gagal unzip');return}Object.keys(unzipped).forEach(function(k){S.files[k]=new TextDecoder().decode(unzipped[k]);S.savedFiles[k]=S.files[k]});persist();renderAll();toast('ZIP Diextract')})};r.readAsArrayBuffer(file)}
+$('mJump').onclick=function(){$('menu').classList.remove('show');var n=prompt('Lompat ke baris:');if(n){var line=parseInt(n);if(line>0){cm.setCursor({line:line-1,ch:0});cm.focus();cm.scrollIntoView(null,50);}}};
+$('mTemplate').onclick=function(){$('menu').classList.remove('show');$('tplModal').classList.add('show')};
+function applyTemplate(type){var tpl='';if(type==='html5')tpl='<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>Baru</title>\n</head>\n<body>\n<h1>Halo</h1>\n</body>\n</html>';if(type==='form')tpl='<form onsubmit="event.preventDefault();alert(\'OK\')">\n<input placeholder="Nama">\n<button>Kirim</button>\n</form>';if(type==='card')tpl='<div style="border:1px solid #ccc;padding:20px;border-radius:12px;text-align:center">\n<h2>Nama</h2>\n<p>Profesi</p>\n</div>';if(!S.active){S.active='template.html';S.open.push(S.active)}S.files[S.active]=tpl;S.savedFiles[S.active]=tpl;openInEditor();persist();renderAll();$('tplModal').classList.remove('show');toast('Template dimuat')}
 $('mDl').onclick=function(){
  $('menu').classList.remove('show');if(!S.active)return;
  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([S.files[S.active]],{type:'text/plain'}));a.download=S.active;a.click();
@@ -354,22 +734,46 @@ $('mReset').onclick=function(){
 /* preview — perbaiki doctype agar tidak quirks mode */
 function buildDoc(){
  if(S.active)S.files[S.active]=cm.getValue();
- return '<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'
-  +(S.files['style.css']||'')+'</style></head><body>'
-  +(S.files['index.html']||'')+'<script>'+(S.files['script.js']||'')+'<\/script></body></html>';
+ var entry=(S.active&&/\.html?$/i.test(S.active))?S.active
+  :(S.files['index.html']!==undefined?'index.html'
+  :Object.keys(S.files).filter(function(n){return /\.html?$/i.test(n)})[0]||'');
+ var body=entry?(S.files[entry]||''):'';
+ if(!body)return '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;color:#888">Tidak ada file HTML. Buat <b>index.html</b> dulu.</body></html>';
+ var cssNames=[]; var jsNames=[];
+ var m1; var reLink=/<link[^>]+href=["']([^"']+\.css)["']/gi;
+ while((m1=reLink.exec(body))){if(S.files[m1[1]])cssNames.push(m1[1])}
+ var m2; var reScript=/<script[^>]+src=["']([^"']+\.js)["']/gi;
+ while((m2=reScript.exec(body))){if(S.files[m2[1]])jsNames.push(m2[1])}
+ if(!cssNames.length)cssNames=Object.keys(S.files).filter(function(n){return /\.css$/i.test(n)});
+ if(!jsNames.length)jsNames=Object.keys(S.files).filter(function(n){return /\.js$/i.test(n)});
+ var css=cssNames.map(function(n){return S.files[n]}).join('\n');
+ var js=jsNames.map(function(n){return S.files[n]}).join('\n');
+ if(/<html[\s>]/i.test(body)){
+  if(/<\/head>/i.test(body))body=body.replace(/<\/head>/i,'<style>'+css+'</style></head>');
+  else body=body.replace(/<body[^>]*>/i,'$&<style>'+css+'</style>');
+  if(/<\/body>/i.test(body))body=body.replace(/<\/body>/i,'<script>'+js+'<\/script></body>');
+  else body+='<script>'+js+'<\/script>';
+  return body;
+ }
+ return '<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style></head><body>'+body+'<script>'+js+'<\/script></body></html>';
 }
-function runPreview(){$('frame').srcdoc=buildDoc();$('preview').classList.add('show');setTimeout(function(){cm.refresh()},50)}
+var consoleScript='<script>function _p(l,a){try{var s=[];for(var i=0;i<a.length;i++){var x=a[i];if(x instanceof Error)s.push(x.stack||x.message);else if(typeof x==="object")s.push(JSON.stringify(x));else s.push(String(x))}parent.postMessage({t:"console",l:l,m:s.join(" ")},"*")}catch(e){}}console.log=function(){_p("log",arguments)};console.error=function(){_p("error",arguments)};console.warn=function(){_p("warn",arguments)};window.onerror=function(m,s,l){_p("error",[m+" at line "+l])};<\/script>';
+function runPreview(){var doc=buildDoc();if(doc.indexOf('<head>')>=0)doc=doc.replace('<head>','<head>'+consoleScript);else doc=consoleScript+doc;$('frame').srcdoc=doc;$('preview').classList.add('show');$('previewConsole').classList.add('show');$('consoleLog').innerHTML='';setTimeout(function(){cm.refresh()},50)}
+window.addEventListener('message',function(e){if(e.data&&e.data.t==='console'){var el=document.createElement('div');el.className='console-line '+(e.data.l==='error'?'error':e.data.l==='warn'?'warn':'');el.textContent='> '+e.data.m;$('consoleLog').appendChild(el);$('consoleLog').scrollTop=$('consoleLog').scrollHeight;}});
 $('btnRun').onclick=runPreview;
 $('pRefresh').onclick=function(){$('frame').srcdoc=buildDoc();toast('Preview dimuat ulang')};
 $('pClose').onclick=function(){$('preview').classList.remove('show');$('frame').srcdoc='';setTimeout(function(){cm.refresh()},50)};
 
 /* extra keyboard */
-var KEYS=['<','>','{','}','(',')',';',':','=','/','"',"'",'!','&','|','Tab','→','←','.'];
+var KEYS=['↶','↷','<','>','{','}','(',')',';',':','=','/','"',"'",'!','&','|','Tab','→','←','.'];
+var lastTouch=0;
 KEYS.forEach(function(k){
- var b=document.createElement('button');b.textContent=k;
+ var b=document.createElement('button');b.textContent=k;var ts=null;
  b.addEventListener('mousedown',function(e){e.preventDefault()});
- b.addEventListener('touchstart',function(e){e.preventDefault();press(k)},{passive:false});
- b.addEventListener('click',function(){press(k)});
+ b.addEventListener('touchstart',function(e){var t=e.touches[0];ts={x:t.clientX,y:t.clientY,t:Date.now(),moved:false}},{passive:true});
+ b.addEventListener('touchmove',function(e){if(!ts)return;var t=e.touches[0];if(Math.abs(t.clientX-ts.x)>8||Math.abs(t.clientY-ts.y)>8)ts.moved=true},{passive:true});
+ b.addEventListener('touchend',function(e){if(!ts)return;var s=ts;ts=null;if(s.moved)return;if(Date.now()-s.t>500)return;if(e.cancelable)e.preventDefault();lastTouch=Date.now();press(k)},{passive:false});
+ b.addEventListener('click',function(){if(Date.now()-lastTouch<500)return;press(k)});
  $('keys').appendChild(b);
 });
 var lastT=0;
@@ -378,13 +782,26 @@ function press(k){
  if(k==='Tab')cm.replaceSelection('  ');
  else if(k==='→')cm.execCommand('goCharRight');
  else if(k==='←')cm.execCommand('goCharLeft');
+ else if(k==='↶')cm.execCommand('undo');
+ else if(k==='↷')cm.execCommand('redo');
  else cm.replaceSelection(k);
  cm.focus();
 }
 
-document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveNow()}});
+document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveNow()}if((e.ctrlKey||e.metaKey)&&e.key==='w'){e.preventDefault();if(S.active)closeTab(S.active)}});
+
+function flushNow(){if(S.active)S.files[S.active]=cm.getValue();clearTimeout(deb);persist()}
+window.addEventListener('beforeunload',flushNow);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushNow()});
 
 /* Cegah context menu browser di UI (kecuali editor/input) */
+$('fileInput').addEventListener('change',function(e){
+ var f=e.target.files[0]; if(!f)return;
+ if(f.name.endsWith('.zip')){importZip(f);}else{var r=new FileReader();r.onload=function(ev){S.files[f.name]=ev.target.result;S.savedFiles[f.name]=ev.target.result;switchTo(f.name)};r.readAsText(f);}
+ e.target.value='';
+});
+$('editorWrap').addEventListener('dragover',function(e){e.preventDefault()});
+$('editorWrap').addEventListener('drop',function(e){e.preventDefault();var f=e.dataTransfer.files[0];if(!f)return;if(f.name.endsWith('.zip')){importZip(f)}else{var r=new FileReader();r.onload=function(ev){S.files[f.name]=ev.target.result;S.savedFiles[f.name]=ev.target.result;switchTo(f.name)};r.readAsText(f)}});
 document.addEventListener('contextmenu',function(e){
   if(e.target.closest('.CodeMirror, input, textarea'))return;
   e.preventDefault();
