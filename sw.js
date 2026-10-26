@@ -1,4 +1,4 @@
-const CACHE = 'mobile-code-v3';
+const CACHE = 'mobile-code-v3.0.1';
 const HTML_URL = './';
 const PRE_CACHE = [
   './',
