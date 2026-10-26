@@ -316,10 +316,10 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
 (function(){
 var KEY='spck_clone_v1';
 var DEFAULTS={
- 'index.html':'<div class="card">\n  <h1>Halo, Spck! 👋</h1>\n  <p>Edit file ini lalu tekan ▶ Run.</p>\n  <button id="btn">Klik aku</button>\n  <p id="out"></p>\n</div>\n',
- 'style.css':'body {\n  font-family: system-ui, sans-serif;\n  background: #0f172a;\n  display: grid;\n  place-items: center;\n  min-height: 100vh;\n  margin: 0;\n}\n.card {\n  background: #1e293b;\n  color: #e2e8f0;\n  padding: 24px;\n  border-radius: 24px;\n  text-align: center;\n}\nbutton {\n  background: #38bdf8;\n  border: 0;\n  padding: 10px 18px;\n  border-radius: 16px;\n  font-weight: 700;\n}\n',
- 'script.js':'let n = 0;\ndocument.getElementById("btn").addEventListener("click", () => {\n  n++;\n  document.getElementById("out").textContent = "Diklik " + n + "x";\n});\nconsole.log("script.js jalan");\n',
- 'README.md':'# Mobile Code\n\nIDE mobile sederhana.\n\n- Edit HTML, CSS, JS\n- Tekan Run untuk preview\n- Semua file tersimpan di localStorage\n'
+ 'index.html':'',
+ 'style.css':'',
+ 'script.js':'',
+ 'README.md':''
 };
 var S={files:{},open:[],active:'',committed:{},theme:'dark',staged:{},history:[],savedFiles:{},fontSize:14,themeMode:'manual',closedTabs:[]};
 function load(){
