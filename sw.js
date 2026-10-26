@@ -1,6 +1,15 @@
-const CACHE = 'mobile-code-v1.0.5';
-const HTML_URL = '/';
-const PRE_CACHE = ['/manifest.json', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'mobile-code-v3';
+const HTML_URL = './';
+const PRE_CACHE = [
+  './',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'index.html',
+  'style.css',
+  'app.js',
+  'script.js'
+];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -27,6 +36,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // only handle same-origin
   if (url.origin !== self.location.origin) return;
 
   const isHTML =
@@ -54,10 +64,12 @@ self.addEventListener('fetch', (e) => {
               } catch (_) {}
             }
             cache.put(HTML_URL, fresh.clone());
+            // also cache index.html explicitly
+            cache.put('index.html', fresh.clone());
           }
           return fresh;
         } catch (_) {
-          const cached = await caches.match(HTML_URL);
+          const cached = await caches.match(HTML_URL) || await caches.match('index.html');
           return cached || new Response('Offline', { status: 503, headers: { 'content-type': 'text/html' } });
         }
       })()
