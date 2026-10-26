@@ -222,7 +222,7 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
         <button class="btn" id="importBtn" style="width:auto;margin:0;padding:10px 16px;flex:none">Clone</button>
       </div>
       <label class="check"><input type="checkbox" id="importReplace"> Replace semua file lama</label>
-      <div id="importStatus" class="hint">V3 FIX: Tempel github.com/user/repo ATAU github.io link. Kalau gagal, coba format user/repo public. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
+      <div id="importStatus" class="hint">V6 - Restore + Push: Tempel github.com/user/repo ATAU github.io link. Kalau gagal, coba format user/repo public. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
     </div>
 
     <div class="import-box" id="pushBox" style="margin-top:10px">
@@ -470,12 +470,51 @@ function renderGit(){
  changed.forEach(function(n){h+='<div class="gitrow"><span class="mod">'+(S.committed[n]===undefined?'A':'M')+'</span><button class="gname" data-diff="'+esc(n)+'">'+esc(n)+'</button><button class="gbtn" data-discard="'+esc(n)+'" title="Discard"><svg viewBox="0 0 24 24"><path d="M3 3v6h6M3.5 9a9 9 0 1116.4 6"/></svg></button><button class="gbtn" data-stage="'+esc(n)+'" title="Stage"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>'});
  $('gitList').innerHTML=h||'<div class="hint" style="padding:2px 4px">Tidak ada perubahan.</div>';
  h='';
- (S.history||[]).forEach(function(c,idx){h+='<div class="gitrow"><span class="hash">'+esc(c.hash||'?')+'</span><button class="gname" data-log="'+idx+'" style="padding-left:6px">'+esc(c.msg||'')+'</button></div>'});
+ (S.history||[]).forEach(function(c,idx){
+   var timeStr='';
+   try{ var d=new Date(c.time); timeStr=d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); }catch(e){}
+   h+='<div class="gitrow"><span class="hash">'+esc(c.hash||'?')+'</span><button class="gname" data-log="'+idx+'" style="padding-left:6px"><span style="display:block;font-size:11px">'+esc(c.msg||'')+'</span><span style="font-size:9px;color:var(--muted)">'+timeStr+' · '+Object.keys(c.files||{}).length+' file</span></button><button class="gbtn" data-restore="'+idx+'" title="Kembalikan ke versi ini" style="color:var(--accent)"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8V3h5l-2.26 2.26A7 7 0 1 1 3 12z"/></svg></button></div>';
+ });
  $('gitHistory').innerHTML=h||'<div class="hint" style="padding:2px 4px">Belum ada commit.</div>';
 }
+
+function restoreCommit(idx){
+  var c=(S.history||[])[idx];
+  if(!c) return;
+  var files=Object.keys(c.files||{});
+  dialog('Kembalikan ke versi ini?',{input:false,msg:c.msg+' ('+c.hash+')\n\n'+files.length+' file akan dikembalikan:\n'+files.join(', ')+'\n\nFile lain tetap ada. Lanjutkan?',ok:'Kembalikan'}).then(function(ok){
+    if(!ok) return;
+    // restore each file from snapshot
+    files.forEach(function(fn){
+      S.files[fn]=c.files[fn];
+      S.savedFiles[fn]=c.files[fn];
+      S.committed[fn]=c.files[fn];
+    });
+    S.staged={};
+    // set active to first file of that commit
+    if(files.length){
+      S.active=files[0];
+      if(S.open.indexOf(S.active)<0) S.open.push(S.active);
+      openInEditor();
+    }
+    persist(); renderAll();
+    toast('Dikembalikan ke '+c.hash+' - '+files.length+' file');
+  });
+}
+
 $('gitStaged').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.diff)showDiff(t.dataset.diff);else if(t.dataset.unstage){delete S.staged[t.dataset.unstage];persist();renderAll()}});
 $('gitList').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.diff)showDiff(t.dataset.diff);else if(t.dataset.stage){S.staged[t.dataset.stage]=true;persist();renderAll()}else if(t.dataset.discard){var n=t.dataset.discard;dialog('Buang perubahan?',{input:false,msg:n,ok:'Buang'}).then(function(ok){if(!ok)return;if(S.committed.hasOwnProperty(n))S.files[n]=S.committed[n];else delete S.files[n];delete S.staged[n];if(S.active===n)openInEditor();persist();renderAll();toast('Dibuang')})}});
-$('gitHistory').addEventListener('click',function(e){var t=e.target.closest('button');if(!t)return;if(t.dataset.log!==undefined){var c=(S.history||[])[+t.dataset.log];if(!c)return;var f=Object.keys(c.files||{});dialog('Commit '+c.hash,{input:false,msg:c.msg+' — '+f.join(', '),ok:'Tutup'}).then(function(){})}});
+$('gitHistory').addEventListener('click',function(e){
+  var t=e.target.closest('button'); if(!t) return;
+  if(t.dataset.restore!==undefined){
+    restoreCommit(+t.dataset.restore);
+  }else if(t.dataset.log!==undefined){
+    var c=(S.history||[])[+t.dataset.log]; if(!c) return;
+    var f=Object.keys(c.files||{});
+    var fileList=f.slice(0,20).join(', ') + (f.length>20?' +'+(f.length-20)+' lagi':'');
+    dialog('Commit '+c.hash,{input:false,msg:c.msg+'\n\n'+fileList+'\n\nKlik icon ↺ di kanan untuk kembalikan.',ok:'Tutup'}).then(function(){});
+  }
+});
 var sa=$('stageAll');if(sa)sa.onclick=function(){Object.keys(S.files).forEach(function(n){if(gitStatus(n))S.staged[n]=true});persist();renderAll();toast('Semua di-stage')};
 function renderSearch(){
  var q=$('searchIn').value.trim().toLowerCase(),h='';
