@@ -222,7 +222,7 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
         <button class="btn" id="importBtn" style="width:auto;margin:0;padding:10px 16px;flex:none">Clone</button>
       </div>
       <label class="check"><input type="checkbox" id="importReplace"> Replace semua file lama</label>
-      <div id="importStatus" class="hint">Tempel link repo GitHub lalu Clone. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
+      <div id="importStatus" class="hint">Tempel link repo GitHub (github.com/user/repo atau user.github.io/repo). Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
     </div>
 
     <div class="hint">Branch: main · origin</div>
@@ -743,15 +743,36 @@ function parseGithubUrl(input){
   if(!input) return null;
   var owner=null,repo=null,branch=null;
   try{
-    if(input.indexOf('github.com')>=0){
+    // Handle github.io Pages URLs: https://username.github.io/repo/  -> owner=username, repo=repo
+    if(input.indexOf('github.io')>=0){
+      try{
+        var u=new URL(input);
+        var host=u.hostname; // e.g. randycamon40.github.io
+        var sub=host.split('.')[0];
+        if(sub && sub!=='www'){
+          owner=sub;
+          var parts=u.pathname.split('/').filter(Boolean);
+          if(parts.length>=1){
+            repo=parts[0].replace(/\.git$/,'');
+            // if path has more like /repo/tree/branch etc, ignore
+            if(parts[1]==='tree' && parts[2]) branch=parts.slice(2).join('/');
+          }else{
+            // https://username.github.io/  -> repo is username.github.io
+            repo=owner+'.github.io';
+          }
+        }
+      }catch(e){}
+    }
+    if(!owner && input.indexOf('github.com')>=0){
       var u=new URL(input);
       var parts=u.pathname.split('/').filter(Boolean);
       owner=parts[0]||null;
       repo=parts[1]?parts[1].replace(/\.git$/,''):null;
       if(parts[2]==='tree' && parts[3]) branch=parts.slice(3).join('/');
       else if(u.searchParams.get('branch')) branch=u.searchParams.get('branch');
-    }else{
-      // format user/repo or user/repo@branch or user/repo:branch
+    }
+    if(!owner){
+      // format user/repo or user/repo@branch or user/repo:branch or just user/repo from github.io fallback
       var tmp=input;
       if(tmp.indexOf('@')>=0){
         var sp=tmp.split('@');
@@ -759,12 +780,21 @@ function parseGithubUrl(input){
         branch=sp[1];
       }else if(tmp.indexOf(':')>=0 && tmp.split(':').length===2){
         var sp2=tmp.split(':');
-        // avoid port confusion, only if second part looks like branch
         if(sp2[1] && sp2[1].indexOf('/')<0){ tmp=sp2[0]; branch=sp2[1]; }
       }
+      // remove https:// etc if any leftover
+      tmp=tmp.replace(/^https?:\/\//,'').replace(/^www\./,'');
+      // remove github.com/ prefix if present
+      tmp=tmp.replace(/^github\.com\//,'');
+      // remove github.io/ prefix if someone pasted username.github.io/repo without protocol
+      // e.g. randycamon40.github.io/HTMLeditor -> becomes randycamon40/HTMLeditor after removing .github.io
+      tmp=tmp.replace(/\.github\.io\//,'/');
+      tmp=tmp.replace(/\.github\.io$/,'');
       var p=tmp.split('/').filter(Boolean);
-      owner=p[0]||null;
-      repo=p[1]?p[1].replace(/\.git$/,''):null;
+      if(p.length>=2){ owner=p[0]||null; repo=p[1]?p[1].replace(/\.git$/,''):null; }
+      else if(p.length===1 && tmp.indexOf('/')<0){
+        // maybe user pasted "username/repo" style already handled? Actually p length 1 means invalid
+      }
     }
   }catch(e){}
   if(!owner || !repo) return null;
@@ -839,7 +869,7 @@ async function importFromGithub(){
   }
 
   if(!blob){
-    $('importStatus').textContent='Gagal download. Pastikan repo public & branch benar (coba main/master).';
+    $('importStatus').textContent='Gagal download. Repo '+owner+'/'+repo+' tidak ketemu. Kalau link kamu https://'+owner+'.github.io/'+repo+'/ , pakai format '+owner+'/'+repo+' . Pastikan repo public.';
     btn.textContent='Clone';
     btn.disabled=false;
     toast('Gagal clone. Cek koneksi / repo private?');
