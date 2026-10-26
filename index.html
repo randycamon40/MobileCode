@@ -222,7 +222,7 @@ mark{background:#f0b429;color:#000;border-radius:4px;padding:0 1px}
         <button class="btn" id="importBtn" style="width:auto;margin:0;padding:10px 16px;flex:none">Clone</button>
       </div>
       <label class="check"><input type="checkbox" id="importReplace"> Replace semua file lama</label>
-      <div id="importStatus" class="hint">Tempel link repo GitHub (github.com/user/repo atau user.github.io/repo). Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
+      <div id="importStatus" class="hint">V3 FIX: Tempel github.com/user/repo ATAU github.io link. Kalau gagal, coba format user/repo public. Support icon-192/512, sw.js, manifest.json, style.css + app.js terpisah tetap kebawa.</div>
     </div>
 
     <div class="hint">Branch: main · origin</div>
@@ -917,6 +917,74 @@ async function fetchContentsAPI(owner, repo, path, branch, filesMap, statusCb){
   }
 }
 
+
+async function importFromPagesDirect(pagesUrl, filesMap, statusCb){
+  try{
+    var base=pagesUrl.trim();
+    if(!base.endsWith('/')) base+='/';
+    if(statusCb) statusCb('Fetch Pages: '+base);
+    var r=await fetchWithProxies(base);
+    if(!r || !r.ok) return false;
+    var htmlText=await r.text();
+    if(!htmlText || htmlText.length<50) return false;
+    // Save index.html
+    filesMap['index.html']=htmlText;
+    // Try to find linked css/js/manifest/sw
+    var cssLinks=[], jsLinks=[], extraLinks=[];
+    var reLink=/<link[^>]+href=["']([^"']+\.css[^"']*)["']/gi;
+    var reScript=/<script[^>]+src=["']([^"']+\.js[^"']*)["']/gi;
+    var reManifest=/<link[^>]+rel=["']manifest["'][^>]*href=["']([^"']+)["']/i;
+    var m;
+    while((m=reLink.exec(htmlText))){ cssLinks.push(m[1]); }
+    while((m=reScript.exec(htmlText))){ jsLinks.push(m[1]); }
+    var mMan=reManifest.exec(htmlText);
+    if(mMan) extraLinks.push(mMan[1]);
+    // common PWA files
+    extraLinks.push('manifest.json','sw.js','style.css','app.js','script.js');
+    var allUrls=[...new Set([...cssLinks, ...jsLinks, ...extraLinks])];
+    for(var i=0;i<allUrls.length;i++){
+      var u=allUrls[i];
+      if(!u) continue;
+      // skip external https://
+      if(u.startsWith('http') && u.indexOf('randycamon40.github.io')<0) continue;
+      if(u.startsWith('//')) continue;
+      // resolve relative
+      var abs=u;
+      if(!u.startsWith('http')){
+        if(u.startsWith('/')){
+          // /HTMLeditor/style.css -> https://randycamon40.github.io + u
+          var urlObj=new URL(base);
+          abs=urlObj.origin + u;
+        }else{
+          abs=base + u;
+        }
+      }
+      try{
+        if(statusCb) statusCb('Fetch: '+u);
+        var rr=await fetchWithProxies(abs);
+        if(!rr || !rr.ok) continue;
+        var txt=await rr.text();
+        if(txt.length>0 && txt.length<500*1024){
+          // derive filename
+          var fname=u.split('/').pop().split('?')[0];
+          if(!fname) continue;
+          // if path like css/style.css keep it
+          var cleanPath=u.replace(/^https?:\/\/[^\/]+\//,''); // remove domain
+          // remove HTMLeditor/ prefix if present?
+          // Keep only filename for simplicity, but keep subfolder if contains /
+          if(u.indexOf('/')>=0 && !u.startsWith('http')){
+            // relative path like css/style.css
+            filesMap[u]=txt;
+          }else{
+            filesMap[fname]=txt;
+          }
+        }
+      }catch(e){}
+    }
+    return Object.keys(filesMap).length>0;
+  }catch(e){ return false; }
+}
+
 async function importFromGithub(){
   var urlVal=$('importUrl').value.trim();
   var branchVal=$('importBranch').value.trim()||'main';
@@ -1043,11 +1111,22 @@ async function importFromGithub(){
     }
   }
 
+  // 3. Last fallback: try import directly from Pages URL if original input was github.io
+  if(Object.keys(allFiles).length===0 && urlVal.indexOf('github.io')>=0){
+    $('importStatus').textContent='GitHub API gagal, coba import langsung dari Pages URL...';
+    var pagesMap={};
+    var pagesOk=await importFromPagesDirect(urlVal, pagesMap, function(msg){ $('importStatus').textContent=msg; });
+    if(pagesOk){
+      allFiles=pagesMap;
+      successInfo={owner:info.owner, repo:info.repo, branch:'pages', subpath:'', method:'Pages-Direct'};
+    }
+  }
+
   if(Object.keys(allFiles).length===0){
-    $('importStatus').textContent='Gagal. Repo '+info.owner+'/'+info.repo+' tidak ketemu atau private. Coba format: randycamon40/HTMLeditor atau https://github.com/randycamon40/HTMLeditor';
+    $('importStatus').textContent='Gagal. Repo '+info.owner+'/'+info.repo+' tidak ketemu. TIPS: Repo harus PUBLIC. Kalau link kamu https://'+info.owner+'.github.io/'+info.repo+'/ , pastikan di github.com ada repo bernama '+info.repo+' (public). Coba ketik exact: '+info.owner+'/'+info.repo;
     btn.textContent='Clone';
     btn.disabled=false;
-    toast('Gagal clone. Pastikan repo public, bukan cuma Pages.');
+    toast('Gagal clone. Cek apakah repo '+info.owner+'/'+info.repo+' public?');
     return;
   }
 
